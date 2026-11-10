@@ -74,7 +74,7 @@ public final class Hooks {
         final Executable target;
         private final boolean isStatic;
         private volatile Interceptor[] interceptors = new Interceptor[0];
-        private Method backup;
+        private volatile Method backup;
 
         Hooker(Executable target) {
             this.target = target;
@@ -99,10 +99,17 @@ public final class Hooks {
             notifyAll();
         }
 
-        /** Another thread can enter the hooked method before nativeHook has returned. */
-        synchronized Method backup() throws InterruptedException {
-            while (backup == null) wait();
-            return backup;
+        /**
+         * Another thread can enter the hooked method before nativeHook has returned. Once the
+         * backup is published this is a plain volatile read: no lock on the hot path.
+         */
+        Method backup() throws InterruptedException {
+            Method published = backup;
+            if (published != null) return published;
+            synchronized (this) {
+                while (backup == null) wait();
+                return backup;
+            }
         }
     }
 
