@@ -17,9 +17,9 @@
 | 阶段 | 内容 | 状态 |
 | --- | --- | --- |
 | 0 | 决策与基线记录 | 决策已定；基线记录待上机 |
-| 1 | 原生加载器验证 | 代码已写，待上机 |
-| 2 | Hook 后端与生命周期切换 | 未开始 |
-| 3 | 配置与界面 | 未开始 |
+| 1 | 原生加载器验证 | **已通过**：日志确认两个进程注入、开机时序和回调链顺序 |
+| 2 | Hook 后端与生命周期切换 | 代码已写（Fix 类原样运行在新后端上），待上机对照基线 |
+| 3 | 配置与界面 | 代码已写，待上机 |
 | 4 | NeoZygisk 专项（含晚加载） | 未开始 |
 | 5 | 打包、文档、发布 | 未开始 |
 
@@ -70,6 +70,22 @@
 
 阶段 1 不通过就停下来重新评估，不进入阶段 2。
 
+> **实际结果**（`PJE110_16.0.2.400` + NeoZygisk）：`injected into system_server`，`probe: hooked=1 deoptimized=1`，
+> 每次广播依次出现 `outer before → inner → outer after`；电池进程注入成功，`battery probe: hooked=12`，
+> 两个 Manager 类都能找到。启动保护的故意崩溃验证还没有做。
+
+### 阶段 2、3 的实现与阶段 1 之后的差异
+
+- 现有的 Fix 类没有改动 Hook 逻辑，只换了后端：`XposedBridge.hookMethod/deoptimize` → `zygisk.Hooks`。
+- Gradle 拆成 `:hook`（运行在 system_server 和电池进程里的代码，加上与应用共用的协议类）和 `:app`。
+  模块 zip 里的 `hook.dex` 由 `zygisk/build.sh` 直接编译 `hook/` 的源码得到，没有经过 R8。
+- Context 不再靠 Hook `attachBaseContext`：system_server 里等 `activity`、`package`、`user`、`window` 服务都注册后取
+  `ActivityThread.getSystemContext()`，电池进程取 `currentApplication()`，都在单独的线程上轮询，最长 5 分钟。
+- 配置由应用保存，经带发送方身份的 `.update.config` 广播整份推给 system_server，校验后原子写入
+  `/data/system/fcmfix/config.properties`。应用每次启动都会再推一次（仅限已经保存过配置的情况）。
+- 状态页“LSPosed”“作用域”两行换成“Zygisk 模块”，显示版本，版本不一致时报警告，晚加载时给提示。
+- 电池进程的 Hook 在 `LoadedApk.createOrUpdateClassLoaderLocked` 之后安装，用的是 `com.oplus.battery` 的类加载器。
+
 ## 阶段 2：Hook 后端与生命周期切换
 
 - 拆出 `:hook`（纯 Java）：移入 `xposed/`、`util/`、适配层；去掉对 androidx 的依赖（`IceboxUtils` 里的 `ContextCompat`、`RequiresPermission`）；
@@ -87,9 +103,9 @@
 - 强停回归通过，bypass 日志行与基线一致；
 - 技术文档第 7 节列出的短方法，命中情况与 Vector 下相同；不同的逐个给出处理（去优化调用方或换 Hook 点）。
 
-## 阶段 3：配置与界面
+## 阶段 3：配置与界面（代码已写）
 
-- system_server：`.update.config` 接收完整配置，校验后原子写入 `/data/system/fcmfix/config.json`，开机读取；
+- system_server：`.update.config` 接收完整配置，校验后原子写入 `/data/system/fcmfix/config.properties`，开机读取；
   `XposedModule.onUpdateConfig` 改为读这个文件；电池进程不再加载配置；
 - 应用：`ConfigStore` 改为本地 `SharedPreferences` + 推送；启动时推一次；
 - `ModuleConnection` 重写为基于状态查询；`MainViewModel` 去掉 `XposedService`、`requestScope`；

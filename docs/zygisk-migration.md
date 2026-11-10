@@ -38,7 +38,7 @@ Hook 逻辑已经隔在 `libxposed/XposedBridge` 适配层后面，直接依赖�
 | 生命周期回调 | `onSystemServerStarting`、`onPackageReady` | `XposedMain.java` | `ZygiskEntry`，见 4.4 |
 | Java 方法 Hook、去优化 | `XposedInterface.hook/deoptimize` | `libxposed/XposedBridge.java` | `zygisk.Hooks`，JNI 调 LSPlant |
 | 配置读取 | `getRemotePreferences("config")` | `XposedModule.onUpdateConfig` | system_server 自己落盘，应用推送 |
-| 配置写入、激活状态、作用域 | `XposedService` | `ui/data/ModuleConnection.kt`、`ConfigStore.kt`、`MainViewModel.kt` | 应用本地保存 + 现有的带身份广播 |
+| 配置写入、激活状态、作用域 | `XposedService` | `ui/data/ModuleConnection.kt`（已删除）、`ConfigStore.kt`、`MainViewModel.kt` | 应用本地保存 + 现有的带身份广播 |
 | 全局禁止内联 | Vector 的 dex2oat 包装 | 无，隐式依赖 | 见 6.3 |
 
 `XposedBridge.invokeOriginalMethod` 和 `XC_MethodReplacement` 在 Hook 侧没有调用方，切换时直接删除。
@@ -103,23 +103,24 @@ APK 只剩界面和配置，不再被注入任何进程。
 ### 4.5 Context
 
 现在靠 Hook `ContextWrapper.attachBaseContext` 等到第一个 Context。这个方法很短，能否命中取决于内联，时机也不确定。
-改为显式获取：
+改为显式获取，在单独的线程上轮询，最长 5 分钟：
 
-- system_server：安装 Hook 时 `createSystemContext()` 已经执行，直接取 `ActivityThread.currentActivityThread().getSystemContext()`；
-- 电池进程：`Application` 创建后取 `ActivityThread.currentApplication()`，注册接收器的动作推迟到这之后。
+- system_server：`activity`、`package`、`user`、`window` 服务都注册之后，取 `ActivityThread.currentActivityThread().getSystemContext()`；
+- 电池进程：取 `ActivityThread.currentApplication()`，非空之后才注册接收器；
+- 用户还没解锁时只注册解锁广播，解锁后再读配置、注册其余接收器。
 
 ### 4.6 配置
 
 不引入守护进程，也不加文件类 SELinux 规则，复用已有的两条带发送方身份校验的广播：
 
 - 应用把配置存在自己的 `SharedPreferences`，变更时和启动时通过 `.update.config` 把完整配置推给 system_server；
-- system_server 校验发送方（沿用 `isConfigSender`），用 `ConfigSnapshot` 校验内容，原子写入 `/data/system/fcmfix/config.json`，开机时从这里读；
+- system_server 校验发送方（沿用 `isConfigSender`），用 `ConfigSnapshot` 校验内容，原子写入 `/data/system/fcmfix/config.properties`，开机时从这里读；
 - 应用通过 `.query.status` 的应答确认 system_server 实际加载的配置；
 - 电池进程不读配置（`OplusBatteryNetworkFix` 没有用到放行列表和选项）。
 
 ### 4.7 界面
 
-- `ModuleConnection` 不再绑定 `XposedService`，“已激活”改为“system_server 应答了状态查询”；
+- 应用不再绑定 `XposedService`：状态页没有单独的“已激活”标志，system_server 应答了状态查询，就说明模块已加载；
 - 删除作用域检查和 `requestScope`；状态页的“LSPosed”“作用域”两行改为“Zygisk 模块”，显示版本和是否晚加载；
 - 状态应答带模块版本，和 APK 版本不一致时提示重刷模块。
 

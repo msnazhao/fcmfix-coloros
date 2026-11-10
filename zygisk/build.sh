@@ -83,9 +83,11 @@ if [ -n "${SIGNING_KEYSTORE:-}" ] && [ -f "$SIGNING_KEYSTORE" ]; then
   UNSIGNED=$ROOT/app/build/outputs/apk/release/app-release-unsigned.apk
   [ -f "$UNSIGNED" ] || { echo "missing $UNSIGNED" >&2; exit 1; }
   "$BUILD_TOOLS/zipalign" -f -p 4 "$UNSIGNED" "$OUT/aligned.apk"
-  # The key and the store use one password.
+  # The key and the store use one password. The v4 signature (.idsig) is only for streaming
+  # installs over adb and would just be a stray file in the zip.
   "$BUILD_TOOLS/apksigner" sign --ks "$SIGNING_KEYSTORE" --ks-pass env:SIGNING_STORE_PASSWORD \
     --ks-key-alias "$SIGNING_KEY_ALIAS" --key-pass env:SIGNING_STORE_PASSWORD \
+    --v4-signing-enabled false \
     --out "$STAGE/fcmfix.apk" "$OUT/aligned.apk"
   "$BUILD_TOOLS/apksigner" verify --print-certs "$STAGE/fcmfix.apk"
 else
