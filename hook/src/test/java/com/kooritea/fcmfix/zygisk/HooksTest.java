@@ -29,7 +29,7 @@ public class HooksTest {
         return hooker;
     }
 
-    @Test public void interceptorsRunOutermostFirstAndReachTheOriginalOnce() throws Exception {
+    @Test public void interceptorsRunOutermostFirstAndReachTheOriginalOnce() throws Throwable {
         Method target = method("twice", int.class);
         Hooks.Hooker hooker = hooker(target, target);
         List<String> order = new ArrayList<>();
@@ -39,14 +39,14 @@ public class HooksTest {
         assertEquals(java.util.Arrays.asList("first before", "second before", "second after", "first after"), order);
     }
 
-    @Test public void interceptorCanChangeArgumentsForTheOnesBelow() throws Exception {
+    @Test public void interceptorCanChangeArgumentsForTheOnesBelow() throws Throwable {
         Method target = method("twice", int.class);
         Hooks.Hooker hooker = hooker(target, target);
         hooker.add(chain -> chain.proceed(new Object[]{5}));
         assertEquals(10, hooker.callback(new Object[]{21}));
     }
 
-    @Test public void interceptorCanReturnWithoutCallingTheOriginal() throws Exception {
+    @Test public void interceptorCanReturnWithoutCallingTheOriginal() throws Throwable {
         Method target = method("twice", int.class);
         Hooks.Hooker hooker = hooker(target, target);
         hooker.add(chain -> -1);
@@ -61,7 +61,7 @@ public class HooksTest {
         assertEquals("original failed", thrown.getMessage());
     }
 
-    @Test public void instanceMethodGetsItsReceiverSeparatedFromTheArguments() throws Exception {
+    @Test public void instanceMethodGetsItsReceiverSeparatedFromTheArguments() throws Throwable {
         Method target = String.class.getDeclaredMethod("concat", String.class);
         Hooks.Hooker hooker = hooker(target, target);
         AtomicReference<Object> seenThis = new AtomicReference<>();
