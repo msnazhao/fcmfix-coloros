@@ -1,0 +1,27 @@
+apply plugin: 'com.android.library'
+
+// The code that runs inside system_server and com.oplus.battery, plus what the app shares with
+// it. The module zip does not use this Gradle module's output: zygisk/build.sh compiles the same
+// sources straight into hook.dex. Gradle builds it for the unit tests and for the app.
+android {
+    namespace = "com.kooritea.fcmfix.hook"
+    compileSdkVersion 36
+
+    defaultConfig {
+        minSdkVersion 29
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    testOptions {
+        unitTests {
+            // Tests of pure logic that also touch Intent or Bundle types get default values.
+            returnDefaultValues = true
+        }
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}

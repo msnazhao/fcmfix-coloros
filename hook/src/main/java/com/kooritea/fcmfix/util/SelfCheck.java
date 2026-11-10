@@ -98,7 +98,7 @@ public final class SelfCheck {
                 : (policy & 3) == 3 ? "禁止 Wi‑Fi 和移动数据"
                 : (policy & 2) != 0 ? "禁止 Wi‑Fi" : "禁止移动数据";
         return new Verdict(Level.FAIL, text + "（" + policy + "）",
-                "确认已勾选电池作用域并重启；仍未恢复请按“提交问题”指南中“流量管理里没有 Google 入口”一节处理");
+                "确认 FCMFix 模块已加载并重启；仍未恢复请按“提交问题”指南中“流量管理里没有 Google 入口”一节处理");
     }
 
     public static String bucketName(int bucket) {

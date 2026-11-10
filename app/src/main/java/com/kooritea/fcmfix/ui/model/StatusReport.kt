@@ -14,7 +14,6 @@ enum class Page { OVERVIEW, APPS, EVENTS }
 enum class RowKind { SECTION, CHECK, EVENT, NOTE }
 
 sealed interface RowAction {
-    data class RequestScope(val scopes: List<String>) : RowAction
     data class AppDetails(val packageName: String) : RowAction
     data object FcmDiagnostics : RowAction
 }
@@ -38,27 +37,15 @@ data class Row(
     val eventKind: EventKind? = null,
 )
 
-/** LSPosed as the module app sees it. */
-data class ModuleInfo(
-    /** "LSPosed 1.10.2", or "LSPosed" when the framework could not be asked. */
-    val framework: String,
-    /** The libxposed API the module is built against. */
-    val apiVersion: Int,
-    /** Scopes FCMFix needs that are not ticked; null when the scope cannot be read. */
-    val missingScopes: List<String>?,
-)
-
 /** The module app's own copy of the config, to compare with what system_server loaded. */
 data class LocalConfig(val manualCount: Int, val autoAllow: Boolean)
 
 /** What the report needs besides the status answer. */
 class ReportEnv(
-    /** Null while LSPosed has not bound the service. */
-    val module: ModuleInfo?,
     val sdkInt: Int,
     val display: String,
     val versionName: String,
-    /** Null when the config cannot be read (service not bound). */
+    /** Null when the app has never saved a config. */
     val localConfig: LocalConfig?,
     val now: Long,
     val label: (String) -> String,
@@ -125,10 +112,10 @@ class StatusReport private constructor(
         return Summary(Level.OK, "一切正常", detail, okFooter())
     }
 
-    /** e.g. "LSPosed 1.10.2 · API 101 · 系统框架 14 项 · 电池 4 项". */
+    /** e.g. "Zygisk 13.2 · 系统框架 14 项 · 电池 4 项". */
     private fun okFooter(): String? {
-        val module = env.module ?: return null
-        val parts = mutableListOf(module.framework + " · API " + module.apiVersion)
+        val version = status.hooks("android").version ?: return null
+        val parts = mutableListOf("Zygisk $version")
         for ((process, label) in StatusSnapshot.PROCESSES) {
             status.hooks(process).active?.let { parts += "$label ${it.size} 项" }
         }
@@ -180,13 +167,7 @@ class StatusReport private constructor(
 
         fun build(): List<Row> {
             section("模块")
-            val module = env.module
-            if (module == null) {
-                add(Level.FAIL, "LSPosed", "模块未激活", "在 LSPosed 中启用 FCMFix，勾选系统框架和电池后重启手机")
-            } else {
-                add(Level.OK, "LSPosed", "已激活 · " + module.framework, null)
-                addScopeRow(module)
-            }
+            addModuleRow()
             if (env.sdkInt < 34) {
                 add(Level.UNKNOWN, "系统检查", "需要 Android 14 及以上", null)
             } else {
@@ -241,18 +222,23 @@ class StatusReport private constructor(
 
         private fun add(title: String, verdict: Verdict) = add(verdict.level, title, verdict.text, verdict.hint)
 
-        private fun addScopeRow(module: ModuleInfo) {
-            val missing = module.missingScopes
+        /** What answers the status query is the module itself; there is no separate "active" flag. */
+        private fun addModuleRow() {
+            val system = status.hooks("android")
             when {
-                missing == null -> add(Level.UNKNOWN, "作用域", "无法读取", null)
-                missing.isEmpty() -> add(Level.OK, "作用域", "系统框架、电池", null)
-                else -> {
-                    val labels = missing.map { if (it == "system") "系统框架" else "电池" }
-                    add(
-                        Level.FAIL, "作用域", "缺少" + labels.joinToString("、"),
-                        "点击向 LSPosed 申请添加，确认后重启手机", RowAction.RequestScope(missing), problem = true,
-                    )
-                }
+                !status.answered || system.active == null -> add(
+                    Level.FAIL, "Zygisk 模块", "没有加载",
+                    "确认 NeoZygisk 已启用、FCMFix 模块没有被停用，然后重启手机；已经启动的系统可在 root 管理器里执行 NeoZygisk 的晚加载",
+                )
+                system.version != null && !system.version.startsWith(env.versionName) -> add(
+                    Level.WARN, "Zygisk 模块", "版本 ${system.version} 与应用 ${env.versionName} 不一致",
+                    "模块和应用要一起更新：重新刷入同一个压缩包，然后重启手机",
+                )
+                system.late -> add(
+                    Level.INFO, "Zygisk 模块", "已晚加载 · ${system.version ?: ""}",
+                    "开机之后才加载，开机时已经发生的限制不会被追溯修正；电池进程要重启后才会被注入",
+                )
+                else -> add(Level.OK, "Zygisk 模块", "已加载 · ${system.version ?: ""}", null)
             }
         }
 
@@ -267,7 +253,7 @@ class StatusReport private constructor(
             val title = "$label Hook"
             when {
                 active == null || failed == null -> add(
-                    Level.FAIL, title, "未加载", "确认已勾选${label}作用域，并在勾选后重启过手机", copyExtra = copyExtra,
+                    Level.FAIL, title, "未加载", "重启手机；仍然未加载时，请导出完整报告反馈", copyExtra = copyExtra,
                 )
                 failed.isNotEmpty() -> add(
                     Level.WARN, title,

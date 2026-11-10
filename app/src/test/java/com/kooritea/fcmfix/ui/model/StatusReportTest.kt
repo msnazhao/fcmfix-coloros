@@ -12,18 +12,18 @@ import java.util.Date
 
 class StatusReportTest {
     private val now = 1_760_000_000_000L
-    private val module = ModuleInfo("LSPosed 1.10.2", 101, emptyList())
+    private val version = "13.2-zygisk+abc1234"
 
-    private fun env(module: ModuleInfo? = this.module, local: LocalConfig? = LocalConfig(2, false), sdk: Int = 36) = ReportEnv(
-        module = module, sdkInt = sdk, display = "PLK110_17.0.0.105", versionName = "13.2",
+    private fun env(local: LocalConfig? = LocalConfig(2, false), sdk: Int = 36) = ReportEnv(
+        sdkInt = sdk, display = "PJE110_16.0.2.400", versionName = "13.2",
         localConfig = local, now = now,
         label = { "Label($it)" },
         relativeTime = { "${(now - it) / 60_000} 分钟前" },
     )
 
     private val hooks = mapOf(
-        "android" to HookGroups(listOf("BroadcastFix", "AutoStartFix"), emptyList(), emptyList()),
-        "com.oplus.battery" to HookGroups(listOf("ControllerCenter"), emptyList(), null),
+        "android" to HookGroups(listOf("BroadcastFix", "AutoStartFix"), emptyList(), emptyList(), version),
+        "com.oplus.battery" to HookGroups(listOf("ControllerCenter"), emptyList(), null, version),
     )
 
     private val healthy = StatusSnapshot(
@@ -37,14 +37,14 @@ class StatusReportTest {
     )
 
     @Test
-    fun inactiveModuleCountsLsposedAndBothHookGroups() {
-        val report = StatusReport.build(env(module = null, local = null), StatusSnapshot())
+    fun silentModuleCountsAsOneProblemPerHookGroup() {
+        val report = StatusReport.build(env(local = null), StatusSnapshot())
         val summary = report.summary()
         assertEquals(Level.FAIL, summary.level)
         assertEquals("有 3 项需要处理", summary.title)
-        assertEquals("LSPosed：模块未激活", summary.detail)
+        assertEquals("Zygisk 模块：没有加载", summary.detail)
         assertEquals(
-            listOf("模块", "LSPosed", "系统框架 Hook", "电池 Hook", "Google 服务", "FCM Diagnostics"),
+            listOf("模块", "Zygisk 模块", "系统框架 Hook", "电池 Hook", "Google 服务", "FCM Diagnostics"),
             report.rows.map { it.title },
         )
         assertEquals(RowAction.FcmDiagnostics, report.rows.last().action)
@@ -52,28 +52,37 @@ class StatusReportTest {
     }
 
     @Test
-    fun healthySummaryShowsFcmAndFramework() {
+    fun healthySummaryShowsFcmAndModuleVersion() {
         val summary = StatusReport.build(env(), healthy).summary()
         assertEquals(Level.OK, summary.level)
         assertEquals("一切正常", summary.title)
         assertEquals("FCM 已连接 1.2.3.4:5228（Wi‑Fi） · 已持续 3 小时 0 分钟\n开机以来没有断线或重连", summary.detail)
-        assertEquals("LSPosed 1.10.2 · API 101 · 系统框架 2 项 · 电池 1 项", summary.footer)
+        assertEquals("Zygisk 13.2-zygisk+abc1234 · 系统框架 2 项 · 电池 1 项", summary.footer)
     }
 
     @Test
-    fun missingScopeRowAsksLsposed() {
-        val report = StatusReport.build(env(module = module.copy(missingScopes = listOf("com.oplus.battery"))), healthy)
-        val scope = report.rows.single { it.title == "作用域" }
-        assertEquals(Level.FAIL, scope.level)
-        assertEquals("缺少电池", scope.detail)
-        assertEquals(RowAction.RequestScope(listOf("com.oplus.battery")), scope.action)
-        assertTrue(scope.problem)
+    fun moduleRowSaysWhenModuleAndAppDiffer() {
+        val old = healthy.copy(hooks = hooks + ("android" to hooks.getValue("android").copy(version = "12.9-zygisk+old")))
+        val row = StatusReport.build(env(), old).rows.single { it.title == "Zygisk 模块" }
+        assertEquals(Level.WARN, row.level)
+        assertTrue(row.problem)
+        assertEquals("版本 12.9-zygisk+old 与应用 13.2 不一致", row.detail)
+    }
+
+    @Test
+    fun lateLoadedModuleIsReportedButNotAProblem() {
+        val late = healthy.copy(hooks = hooks + ("android" to hooks.getValue("android").copy(late = true)))
+        val report = StatusReport.build(env(), late)
+        val row = report.rows.single { it.title == "Zygisk 模块" }
+        assertEquals(Level.INFO, row.level)
+        assertFalse(row.problem)
+        assertEquals("一切正常", report.summary().title)
     }
 
     @Test
     fun hookRowListsMismatchesAndKeepsSkippedForTheCopy() {
         val status = healthy.copy(
-            hooks = hooks + ("android" to HookGroups(listOf("A"), listOf("B: no method"), listOf("C: absent"))),
+            hooks = hooks + ("android" to HookGroups(listOf("A"), listOf("B: no method"), listOf("C: absent"), version)),
         )
         val row = StatusReport.build(env(), status).rows.single { it.title == "系统框架 Hook" }
         assertEquals(Level.WARN, row.level)
@@ -152,8 +161,8 @@ class StatusReportTest {
         val text = StatusReport.build(env(local = null), status).toText(Date(0))
         val expected = "FCMFix 自查 " + java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.ROOT).format(Date(0)) +
             "\n\n【模块】" +
-            "\n✓ LSPosed：已激活 · LSPosed 1.10.2" +
-            "\n✓ 作用域：系统框架、电池" +
+            "\n✗ Zygisk 模块：没有加载" +
+            "\n  → 确认 NeoZygisk 已启用、FCMFix 模块没有被停用，然后重启手机；已经启动的系统可在 root 管理器里执行 NeoZygisk 的晚加载" +
             "\n✓ 系统框架 Hook：2 项生效\n  生效：BroadcastFix、AutoStartFix" +
             "\n✓ 电池 Hook：1 项生效\n  生效：ControllerCenter" +
             "\n\n【Google 服务】" +

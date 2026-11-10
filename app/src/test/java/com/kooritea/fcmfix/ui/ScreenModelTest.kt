@@ -2,7 +2,6 @@ package com.kooritea.fcmfix.ui
 
 import com.kooritea.fcmfix.ui.data.InstalledApp
 import com.kooritea.fcmfix.ui.data.ModuleConfig
-import com.kooritea.fcmfix.ui.data.ModuleConnection
 import com.kooritea.fcmfix.ui.model.AppCheck
 import com.kooritea.fcmfix.ui.model.Page
 import com.kooritea.fcmfix.ui.model.ReportEnv
@@ -15,7 +14,7 @@ import org.junit.Test
 
 class ScreenModelTest {
     private fun report(status: StatusSnapshot) = StatusReport.build(
-        ReportEnv(null, 36, "", "13.2", null, 0, { it }, { "刚刚" }), status,
+        ReportEnv(36, "", "13.2", null, 0, { it }, { "刚刚" }), status,
     )
 
     @Test
@@ -33,7 +32,7 @@ class ScreenModelTest {
             ),
         )
         val state = AppUiState(
-            ModuleConnection.State.Missing, ModuleConfig(allowList = setOf("chat"), autoAllowFcm = true), apps, report(status),
+            ModuleConfig(allowList = setOf("chat"), autoAllowFcm = true), apps, report(status),
         )
         val items = appItems(state).associateBy { it.app.packageName }
         assertTrue(items.getValue("chat").attention)

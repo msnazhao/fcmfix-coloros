@@ -20,6 +20,9 @@ public final class HookStatus {
     public static final String FAILED_SUFFIX = ".failed";
     /** Known firmware variants that do not contain the restriction; never counted as active. */
     public static final String SKIPPED_SUFFIX = ".skipped";
+    /** Per process: the module's own version, and whether NeoZygisk loaded it late. */
+    public static final String VERSION_SUFFIX = ".version";
+    public static final String LATE_SUFFIX = ".late";
     /** system_server only: whether Battery declares IgnoreGmsUserSet (gates the firewall drop). */
     public static final String KEY_IGNORE_GMS_USER_SET = "ignoreGmsUserSet";
     /** Query extra: also return each process's recent module log lines (report export only). */

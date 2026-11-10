@@ -10,16 +10,16 @@ android {
         applicationId "io.github.artifical0.fcmfix.coloros"
         minSdkVersion 29
         targetSdkVersion 36
-        versionCode 83
-        versionName "13.2"
+        versionCode 84
+        versionName "14.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
-            // LSPosed loads the whole dex into system_server and Battery. R8 drops the unused
-            // parts of the libraries; proguard-rules.pro keeps the hook side exactly as written.
+            // The hook code is compiled into the module's hook.dex, not into this APK, so R8
+            // can shrink everything here.
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
@@ -63,9 +63,7 @@ tasks.withType(Test).configureEach {
 
 dependencies {
     def composeBom = platform('androidx.compose:compose-bom:2026.06.01')
-    compileOnly 'io.github.libxposed:api:101.0.1'
-    implementation 'io.github.libxposed:interface:101.0.0'
-    implementation 'io.github.libxposed:service:101.0.0'
+    implementation project(':hook')
     implementation composeBom
     implementation 'androidx.compose.material3:material3'
     implementation 'androidx.activity:activity-compose:1.13.0'

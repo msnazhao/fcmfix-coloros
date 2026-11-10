@@ -64,7 +64,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kooritea.fcmfix.R
 import com.kooritea.fcmfix.ui.data.InstalledApp
 import com.kooritea.fcmfix.ui.data.ModuleConfig
-import com.kooritea.fcmfix.ui.data.ModuleConnection
 import com.kooritea.fcmfix.ui.model.RowAction
 import com.kooritea.fcmfix.ui.model.StatusReport
 import kotlinx.coroutines.launch
@@ -74,7 +73,6 @@ enum class Tab { STATUS, APPS, TIMELINE }
 
 /** Everything the screens show: from MainViewModel, or built by hand in screenshot tests. */
 data class AppUiState(
-    val connection: ModuleConnection.State,
     val config: ModuleConfig?,
     val apps: List<InstalledApp>?,
     val report: StatusReport?,
@@ -82,8 +80,8 @@ data class AppUiState(
     val scanning: Boolean = false,
     val versionName: String = "",
 ) {
-    /** Nothing to show until LSPosed answered (or never will) and the first query returned. */
-    val loading: Boolean get() = report == null || connection == ModuleConnection.State.Connecting
+    /** Nothing to show until the first status query has returned. */
+    val loading: Boolean get() = report == null
 }
 
 /** What the screens can change; MainViewModel implements it. */
@@ -95,7 +93,6 @@ interface AppActions {
     fun setKeepNotifications(enabled: Boolean)
     fun setIceBox(enabled: Boolean)
     fun allowAllFcm()
-    fun requestScope(scopes: List<String>)
     fun copyText(): String?
     fun startExport()
     fun export(packageName: String?)
@@ -109,7 +106,6 @@ interface AppActions {
         override fun setKeepNotifications(enabled: Boolean) = Unit
         override fun setIceBox(enabled: Boolean) = Unit
         override fun allowAllFcm() = Unit
-        override fun requestScope(scopes: List<String>) = Unit
         override fun copyText(): String? = null
         override fun startExport() = Unit
         override fun export(packageName: String?) = Unit
@@ -119,7 +115,6 @@ interface AppActions {
 
 @Composable
 fun FcmFixApp(viewModel: MainViewModel) {
-    val connection by viewModel.connection.collectAsStateWithLifecycle()
     val config by viewModel.config.collectAsStateWithLifecycle()
     val apps by viewModel.apps.collectAsStateWithLifecycle()
     val report by viewModel.report.collectAsStateWithLifecycle()
@@ -139,7 +134,7 @@ fun FcmFixApp(viewModel: MainViewModel) {
         viewModel.messages.collect { snackbar.showSnackbar(it) }
     }
 
-    val state = AppUiState(connection, config, apps, report, refreshing, scanning, viewModel.versionName)
+    val state = AppUiState(config, apps, report, refreshing, scanning, viewModel.versionName)
     CompositionLocalProvider(LocalIconSource provides viewModel.icons) {
         FcmFixScreen(state, viewModel, snackbar)
     }
@@ -340,7 +335,6 @@ class Navigation(
 ) {
     fun run(action: RowAction) {
         when (action) {
-            is RowAction.RequestScope -> actions.requestScope(action.scopes)
             is RowAction.AppDetails -> openApp(action.packageName)
             RowAction.FcmDiagnostics -> start(
                 Intent(Intent.ACTION_VIEW).setComponent(

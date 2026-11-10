@@ -9,6 +9,10 @@ data class HookGroups(
     val active: List<String>?,
     val failed: List<String>?,
     val skipped: List<String>?,
+    /** The module's own version, e.g. "13.2-zygisk+abc1234"; null when it did not say. */
+    val version: String? = null,
+    /** NeoZygisk loaded the module into a process that was already running. */
+    val late: Boolean = false,
 )
 
 /** What system_server reports for one allowed app. */
@@ -89,6 +93,8 @@ data class StatusSnapshot(
                         status.getStringArrayList(process + HookStatus.ACTIVE_SUFFIX),
                         status.getStringArrayList(process + HookStatus.FAILED_SUFFIX),
                         status.getStringArrayList(process + HookStatus.SKIPPED_SUFFIX),
+                        status.getString(process + HookStatus.VERSION_SUFFIX),
+                        status.getBoolean(process + HookStatus.LATE_SUFFIX),
                     )
                 },
                 configLoaded = status.getBoolean(SelfCheck.KEY_CONFIG_LOADED),

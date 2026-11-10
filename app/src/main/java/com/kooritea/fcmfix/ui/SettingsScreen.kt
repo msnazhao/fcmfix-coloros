@@ -101,7 +101,7 @@ fun SettingsScreen(
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         leadingContent = { LevelIcon(Level.INFO) },
                         headlineContent = { Text("FCMFix ColorOS ${state.versionName}", fontWeight = FontWeight.Medium) },
-                        supportingContent = { Text("基于上游 fcmfix 53。LSPosed 作用域：系统框架 + 电池") },
+                        supportingContent = { Text("基于上游 fcmfix 53。需要 NeoZygisk，模块里带着本应用") },
                     )
                     RowDivider()
                     ActionRow(R.drawable.ic_code, "项目主页", "github.com/ByteJuno/fcmfix-coloros", trailing = R.drawable.ic_open_in_new) {

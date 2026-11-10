@@ -2,15 +2,7 @@ name: Zygisk module
 on:
   push:
     branches: [zygisk]
-    paths:
-      - "zygisk/**"
-      - ".gitmodules"
-      - ".github/workflows/zygisk.yml"
   pull_request:
-    paths:
-      - "zygisk/**"
-      - ".gitmodules"
-      - ".github/workflows/zygisk.yml"
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,15 +12,17 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
+          fetch-depth: 0
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           java-version: '21'
           distribution: temurin
+          cache: gradle
       - name: Install NDK and platform
         shell: bash
         run: |
@@ -40,8 +34,28 @@ jobs:
           command -v ninja > /dev/null || sudo apt-get install -y ninja-build
           cmake --version
           ninja --version
+      - name: Decode the signing key
+        # Secrets are not available to pull requests from forks: those build without the app.
+        env:
+          KEYSTORE: ${{ secrets.KEYSTORE }}
+        shell: bash
+        run: |
+          if [ -n "$KEYSTORE" ]; then
+            printf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/release.jks"
+            echo "SIGNING_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::no KEYSTORE secret; the module is built without the app"
+          fi
       - name: Build
-        run: bash zygisk/build.sh
+        env:
+          SIGNING_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          chmod +x gradlew
+          bash zygisk/build.sh
+      - name: Remove the key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: fcmfix-coloros-zygisk
@@ -54,3 +68,13 @@ jobs:
           name: symbols
           path: zygisk/build/libfcmfix_zygisk.unstripped.so
           retention-days: 14
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-reports
+          path: |
+            hook/build/reports/
+            app/build/reports/
+          if-no-files-found: ignore
+          retention-days: 7

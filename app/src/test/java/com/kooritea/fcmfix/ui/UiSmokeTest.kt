@@ -41,7 +41,6 @@ class UiSmokeTest {
         override fun setAllowed(target: InstalledApp, allowed: Boolean) { calls += "allow ${target.packageName} $allowed" }
         override fun setAutoAllow(enabled: Boolean) { calls += "auto $enabled" }
         override fun allowAllFcm() { calls += "allowAll" }
-        override fun requestScope(scopes: List<String>) { calls += "scope $scopes" }
         override fun startExport() { calls += "export" }
         override fun refreshStatus() { calls += "refresh" }
     }
@@ -65,18 +64,15 @@ class UiSmokeTest {
     fun healthyStatus() {
         show(Samples.healthy())
         compose.onNodeWithText("一切正常").assertIsDisplayed()
-        compose.onNodeWithText("LSPosed 1.10.2 · API 101 · 系统框架 14 项 · 电池 4 项").assertExists()
+        compose.onNodeWithText("Zygisk 13.2-zygisk+abc1234 · 系统框架 14 项 · 电池 4 项").assertExists()
         scrollTo("FCM 连接（系统框架检测）")
         compose.onNodeWithText("FCM 连接（系统框架检测）").assertIsDisplayed()
     }
 
     @Test
-    fun problemsLeadWithTheFirstOneAndScopeRowAsksLsposed() {
-        val actions = Recorder()
-        show(Samples.problems(), actions = actions)
-        compose.onNodeWithText("有 5 项需要处理").assertIsDisplayed()
-        compose.onNodeWithText("作用域").performClick()
-        assertEquals(listOf("scope [com.oplus.battery]"), actions.calls)
+    fun problemsLeadWithTheFirstOne() {
+        show(Samples.problems())
+        compose.onNodeWithText("有 4 项需要处理").assertIsDisplayed()
     }
 
     @Test

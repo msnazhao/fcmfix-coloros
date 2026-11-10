@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# Builds the Zygisk module zip: hook dex -> library with the dex embedded -> flashable zip.
+# Builds the Zygisk module zip: hook dex -> library with the dex embedded -> signed app -> zip.
 # Run by .github/workflows/zygisk.yml. Needs ANDROID_HOME, ANDROID_NDK_HOME, a JDK, CMake 3.28+
 # and Ninja 1.11+ (C++ modules in LSPlant).
+#
+# The app is signed when SIGNING_KEYSTORE (a file), SIGNING_STORE_PASSWORD and SIGNING_KEY_ALIAS
+# are set, and left out otherwise: a build without the key still gives a module that can be
+# tested, only without the companion app.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -18,18 +22,25 @@ BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
 VERSION_NAME=$(sed -n 's/.*versionName "\([^"]*\)".*/\1/p' "$ROOT/app/build.gradle")
 VERSION_CODE=$(sed -n 's/.*versionCode \([0-9]*\).*/\1/p' "$ROOT/app/build.gradle")
 COMMIT=$(git -C "$ROOT" rev-parse --short HEAD)
-VERSION="$VERSION_NAME-zygisk-$COMMIT"
+VERSION="$VERSION_NAME-zygisk"
 
 rm -rf "$OUT"
-mkdir -p "$OUT/classes" "$OUT/dex"
+mkdir -p "$OUT/src" "$OUT/classes" "$OUT/dex"
 
 echo "== hook dex"
-find "$ROOT/zygisk/java" -name '*.java' > "$OUT/sources.txt"
+# The hook code is the hook module's sources. Only the version constants are filled in, in a
+# copy, so the working tree stays as committed.
+cp -r "$ROOT/hook/src/main/java/." "$OUT/src/"
+sed -i "s/@VERSION@/$VERSION/; s/@COMMIT@/$COMMIT/" "$OUT/src/com/kooritea/fcmfix/zygisk/BuildInfo.java"
+find "$OUT/src" -name '*.java' > "$OUT/sources.txt"
 # Plain string concatenation: no invokedynamic for d8 to rewrite.
 javac -source 17 -target 17 -Xlint:-options -XDstringConcat=inline -encoding UTF-8 \
   -classpath "$PLATFORM_JAR" -d "$OUT/classes" @"$OUT/sources.txt"
 jar --create --file "$OUT/classes.jar" -C "$OUT/classes" .
 "$BUILD_TOOLS/d8" --release --min-api 29 --lib "$PLATFORM_JAR" --output "$OUT/dex" "$OUT/classes.jar"
+# The module is built to run on one dex file; a second one would not be loaded.
+[ "$(ls "$OUT/dex" | wc -l)" -eq 1 ] || { echo "hook dex is not a single file" >&2; exit 1; }
+unzip -p "$OUT/classes.jar" com/kooritea/fcmfix/zygisk/ZygiskEntry.class > /dev/null
 
 echo "== library ($ABI)"
 cmake -S "$ROOT/zygisk" -B "$OUT/cmake" -G Ninja \
@@ -58,12 +69,30 @@ if grep -vxE 'lib(c|m|dl|log|z)\.so' "$OUT/needed.txt"; then
   exit 1
 fi
 
-echo "== module zip"
+echo "== module files"
 STAGE=$OUT/module
 cp -r "$ROOT/zygisk/module" "$STAGE"
 mkdir -p "$STAGE/zygisk"
 cp "$LIB" "$STAGE/zygisk/$ABI.so"
-sed -i "s/@VERSION@/$VERSION/; s/@VERSION_CODE@/$VERSION_CODE/" "$STAGE/module.prop"
+sed -i "s/@VERSION@/$VERSION+$COMMIT/; s/@VERSION_CODE@/$VERSION_CODE/" "$STAGE/module.prop"
+
+echo "== app"
+if [ -n "${SIGNING_KEYSTORE:-}" ] && [ -f "$SIGNING_KEYSTORE" ]; then
+  : "${SIGNING_STORE_PASSWORD:?}" "${SIGNING_KEY_ALIAS:?}"
+  (cd "$ROOT" && ./gradlew --no-daemon :hook:testDebugUnitTest :app:testDebugUnitTest :app:assembleRelease)
+  UNSIGNED=$ROOT/app/build/outputs/apk/release/app-release-unsigned.apk
+  [ -f "$UNSIGNED" ] || { echo "missing $UNSIGNED" >&2; exit 1; }
+  "$BUILD_TOOLS/zipalign" -f -p 4 "$UNSIGNED" "$OUT/aligned.apk"
+  # The key and the store use one password.
+  "$BUILD_TOOLS/apksigner" sign --ks "$SIGNING_KEYSTORE" --ks-pass env:SIGNING_STORE_PASSWORD \
+    --ks-key-alias "$SIGNING_KEY_ALIAS" --key-pass env:SIGNING_STORE_PASSWORD \
+    --out "$STAGE/fcmfix.apk" "$OUT/aligned.apk"
+  "$BUILD_TOOLS/apksigner" verify --print-certs "$STAGE/fcmfix.apk"
+else
+  echo "no signing key: the module is built without the app"
+fi
+
+echo "== checks"
 # One stray character from a Windows checkout would break the installer or the boot scripts.
 if grep -rlI $'\r' "$STAGE"; then
   echo "CRLF line endings in the module files above" >&2
@@ -77,7 +106,7 @@ for script in "$STAGE"/*.sh "$STAGE/META-INF/com/google/android/update-binary"; 
   sh -n "$script"
 done
 
-ZIP=$OUT/fcmfix-coloros-zygisk-$VERSION.zip
+ZIP=$OUT/fcmfix-coloros-zygisk-$VERSION_NAME-$COMMIT.zip
 (cd "$STAGE" && zip -qr9 "$ZIP" .)
 (cd "$OUT" && sha256sum "$(basename "$ZIP")" > SHA256SUMS)
 unzip -l "$ZIP"

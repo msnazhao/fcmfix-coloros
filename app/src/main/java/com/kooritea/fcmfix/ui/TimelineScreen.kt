@@ -130,7 +130,7 @@ fun TimelineTab(state: AppUiState, actions: AppActions, nav: Navigation, modifie
                         }
                     }
                     rows.isEmpty() -> item {
-                        NoteText("系统框架没有响应，看不到时间线。请先在“状态”页处理模块问题：确认已勾选作用域，并在勾选后重启过手机")
+                        NoteText("系统框架没有响应，看不到时间线。请先在“状态”页处理模块问题：确认 NeoZygisk 和 FCMFix 模块已启用，并重启过手机")
                     }
                     else -> {
                         timeline.intro.forEach { item { NoteText(it) } }

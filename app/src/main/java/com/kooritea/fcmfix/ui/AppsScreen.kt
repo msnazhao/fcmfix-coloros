@@ -57,7 +57,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kooritea.fcmfix.R
 import com.kooritea.fcmfix.ui.data.InstalledApp
-import com.kooritea.fcmfix.ui.data.ModuleConnection
 import com.kooritea.fcmfix.ui.model.AppCheck
 import com.kooritea.fcmfix.ui.model.AppVerdict
 import com.kooritea.fcmfix.ui.theme.levelColor
@@ -298,7 +297,7 @@ fun AppDetailSheet(item: AppItem, state: AppUiState, actions: AppActions, nav: N
                 onDismiss()
                 actions.export(item.app.packageName)
             },
-            exportable = state.connection is ModuleConnection.State.Bound,
+            exportable = state.report?.status?.answered == true,
         )
     }
 }

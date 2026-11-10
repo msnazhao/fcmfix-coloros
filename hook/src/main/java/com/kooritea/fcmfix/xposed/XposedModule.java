@@ -1,26 +1,24 @@
 package com.kooritea.fcmfix.xposed;
 
 import android.annotation.SuppressLint;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Process;
 import android.os.SystemClock;
 import android.os.UserManager;
 import android.util.Log;
-import com.kooritea.fcmfix.util.FcmTrust;
+import com.kooritea.fcmfix.util.ConfigFile;
 import com.kooritea.fcmfix.util.ConfigSnapshot;
 import com.kooritea.fcmfix.util.DiagnosticLogger;
+import com.kooritea.fcmfix.util.FcmTrust;
 import com.kooritea.fcmfix.util.HookStatus;
 import com.kooritea.fcmfix.util.OplusAttribution;
 import com.kooritea.fcmfix.util.SelfCheck;
+import com.kooritea.fcmfix.zygisk.BuildInfo;
+import java.io.File;
 import java.lang.reflect.Method;
 
 import com.kooritea.fcmfix.libxposed.XC_MethodHook;
@@ -28,27 +26,32 @@ import com.kooritea.fcmfix.libxposed.XposedBridge;
 import com.kooritea.fcmfix.libxposed.XposedHelpers;
 
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
-
-import static android.content.Context.NOTIFICATION_SERVICE;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public abstract class XposedModule {
     protected static final String MODULE_PACKAGE_NAME = "io.github.artifical0.fcmfix.coloros";
-    protected static final String ACTION_UPDATE_CONFIG = MODULE_PACKAGE_NAME + ".update.config";
+    public static final String ACTION_UPDATE_CONFIG = MODULE_PACKAGE_NAME + ".update.config";
     private static final String ACTION_QUERY_STATUS = MODULE_PACKAGE_NAME + HookStatus.QUERY_ACTION_SUFFIX;
+    /** system_server keeps the config here; the module app pushes it whenever it changes. */
+    private static final File CONFIG_FILE = new File("/data/system/fcmfix/config.properties");
     private static String selfPackageName = "UNKNOWN";
+    private static volatile boolean lateInject;
 
     protected final ClassLoader classLoader;
     static final String TAG = "FcmFix";
     private static volatile ConfigSnapshot config;
-    private static boolean reloadRequested;
+    private static final ExecutorService configWriter =
+            Executors.newSingleThreadExecutor(runnable -> new Thread(runnable, "FCMFix-config"));
+    /** Receivers already registered; a failed activation can be retried without doubling them. */
+    private static final Set<String> registered = new HashSet<>();
 
     @SuppressLint("StaticFieldLeak")
     protected static volatile Context context = null;
-    private static final ArrayList<XposedModule> instances = new ArrayList<>();
-    private static Boolean isInitReceiver = false;
     public static volatile boolean isBootComplete = false;
-    private static Thread loadConfigThread = null;
     private static final Set<String> loggedWarnings = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static final DiagnosticLogger diagnosticLogger = new DiagnosticLogger(
             text -> XposedBridge.log("[fcmfix] " + text),
@@ -61,56 +64,42 @@ public abstract class XposedModule {
 
     protected XposedModule(final ClassLoader classLoader) {
         this.classLoader = classLoader;
-        instances.add(this);
-        if (instances.size() == 1) {
-            initContext(classLoader);
-        } else if (context != null && context.getSystemService(UserManager.class).isUserUnlocked()) {
-            try {
-                onCanReadConfig();
-            } catch (Throwable e) {
-                printLog(e.getMessage());
-            }
-        }
     }
 
     public static void setSelfPackageName(String packageName) {
         selfPackageName = packageName;
     }
 
-    private static void initContext(final ClassLoader classLoader) {
-        XposedHelpers.findAndHookMethod("android.content.ContextWrapper", classLoader, "attachBaseContext", Context.class, new XC_MethodHook() {
-            @Override
-            protected void afterHookedMethod(MethodHookParam methodHookParam) {
-                if (context == null) {
-                    context = (Context) methodHookParam.thisObject;
-                    if (context.getSystemService(UserManager.class).isUserUnlocked()) {
-                        callAllOnCanReadConfig();
-                    } else {
-                        IntentFilter userUnlockIntentFilter = new IntentFilter();
-                        userUnlockIntentFilter.addAction(Intent.ACTION_USER_UNLOCKED);
-                        context.registerReceiver(unlockBroadcastReceive, userUnlockIntentFilter);
-                    }
-                }
-            }
-        });
+    /** NeoZygisk attached to a system_server that was already serving. */
+    public static void setLateInject(boolean late) {
+        lateInject = late;
     }
 
-    private static void callAllOnCanReadConfig() {
-        initReceiver();
-        // Upstream waited another 60 s here, but GMS reconnects and flushes the messages queued
-        // during a reboot within that minute; stopped apps would miss them. Until the config
-        // finishes loading, targetIsAllow() is false anyway.
-        isBootComplete = true;
-        for (XposedModule instance : instances) {
-            try {
-                instance.onCanReadConfig();
-            } catch (Throwable e) {
-                printLog(e.getMessage());
-            }
+    /**
+     * The hooks are installed; give them a Context and start the parts that need one. Runs once
+     * the process can use its services, and again after a failed attempt.
+     */
+    public static synchronized void activate(Context processContext) {
+        if (isBootComplete) return;
+        context = processContext;
+        if (context.getSystemService(UserManager.class).isUserUnlocked()) {
+            ready();
+        } else {
+            registerOnce("unlock", () -> {
+                IntentFilter filter = new IntentFilter();
+                filter.addAction(Intent.ACTION_USER_UNLOCKED);
+                context.registerReceiver(unlockBroadcastReceive, filter);
+            });
         }
     }
 
-    protected void onCanReadConfig() throws Throwable {
+    private static void ready() {
+        loadConfigFromDisk();
+        initReceiver();
+        // Upstream waited another 60 s here, but GMS reconnects and flushes the messages queued
+        // during a reboot within that minute; stopped apps would miss them. Until the config
+        // is loaded, targetIsAllow() is false anyway.
+        isBootComplete = true;
     }
 
     protected static void printLog(String text) {
@@ -122,36 +111,25 @@ public abstract class XposedModule {
                 SystemClock.elapsedRealtime());
     }
 
-    protected void checkUserDeviceUnlockAndUpdateConfig() {
-        if (context != null && context.getSystemService(UserManager.class).isUserUnlocked()) {
-            try {
-                onUpdateConfig();
-            } catch (Throwable e) {
-                printLog("更新配置文件失败: " + e.getMessage());
-            }
-        }
-    }
-
     private static final BroadcastReceiver unlockBroadcastReceive = new BroadcastReceiver() {
         public void onReceive(Context _context, Intent intent) {
-            String action = intent.getAction();
-            if (Intent.ACTION_USER_UNLOCKED.equals(action)) {
-                try {
-                    context.unregisterReceiver(unlockBroadcastReceive);
-                } catch (Throwable ignored) {
-                }
-                callAllOnCanReadConfig();
+            if (!Intent.ACTION_USER_UNLOCKED.equals(intent.getAction())) return;
+            try {
+                context.unregisterReceiver(unlockBroadcastReceive);
+            } catch (Throwable ignored) {
             }
+            // The unlock broadcast is delivered on the main thread; keep file and scan work off it.
+            new Thread(() -> {
+                synchronized (XposedModule.class) {
+                    if (!isBootComplete) ready();
+                }
+            }, "FCMFix-ready").start();
         }
     };
 
     protected boolean targetIsAllow(String packageName) {
         ConfigSnapshot snapshot = config;
-        if (snapshot == null) {
-            checkUserDeviceUnlockAndUpdateConfig();
-            return false;
-        }
-        return snapshot.allows(packageName, FcmPackages.current());
+        return snapshot != null && snapshot.allows(packageName, FcmPackages.current());
     }
 
     protected String findAllowedPackageArgument(Object[] args) {
@@ -165,80 +143,88 @@ public abstract class XposedModule {
 
     protected boolean getBooleanConfig(String key, boolean defaultValue) {
         ConfigSnapshot snapshot = config;
-        if (snapshot == null) {
-            checkUserDeviceUnlockAndUpdateConfig();
-            return defaultValue;
-        }
-        return snapshot.options.getOrDefault(key, defaultValue);
+        return snapshot == null ? defaultValue : snapshot.options.getOrDefault(key, defaultValue);
     }
 
-    protected static synchronized void onUpdateConfig() {
-        reloadRequested = true;
-        if (loadConfigThread != null) return;
-        loadConfigThread = new Thread(() -> {
-            while (true) {
-                synchronized (XposedModule.class) {
-                    if (!reloadRequested) {
-                        loadConfigThread = null;
-                        return;
-                    }
-                    reloadRequested = false;
-                }
-                try {
-                    SharedPreferences preferences = XposedBridge.getRemotePreferences("config");
-                    if (preferences == null) throw new IllegalStateException("RemotePreferences unavailable");
-                    ConfigSnapshot loaded = new ConfigSnapshot(preferences.getAll());
-                    config = loaded;
-                    if (loaded.autoAllowFcm() && "android".equals(getSelfPackageName())) {
-                        FcmPackages.ensureScanned(context);
-                    }
-                } catch (Throwable e) {
-                    printLog("Remote config reload failed: " + e.getMessage());
-                }
+    private static boolean ownsConfig() {
+        return "android".equals(getSelfPackageName());
+    }
+
+    private static void loadConfigFromDisk() {
+        if (!ownsConfig()) return;
+        try {
+            Map<String, Object> values = ConfigFile.read(CONFIG_FILE);
+            if (values == null) {
+                printLog("No saved config yet; waiting for the FCMFix app to send it");
+                return;
             }
-        }, "FCMFix-config");
-        loadConfigThread.start();
+            publish(new ConfigSnapshot(values));
+        } catch (Throwable e) {
+            printLog("Saved config unreadable, nothing is allowed until the app sends a new one: " + e);
+        }
     }
 
-    /** Removes the channel that older versions' no-response notification created in system_server. */
-    private static void onUninstallFcmfix() {
-        NotificationManager notificationManager = (NotificationManager) context.getSystemService(NOTIFICATION_SERVICE);
-        NotificationChannel channel = notificationManager.getNotificationChannel("fcmfix");
-        if (channel != null) {
-            notificationManager.deleteNotificationChannel(channel.getId());
+    private static void publish(ConfigSnapshot loaded) {
+        config = loaded;
+        if (loaded.autoAllowFcm()) FcmPackages.ensureScanned(context);
+    }
+
+    /** The module app's pushed config: validated first, then published and saved. */
+    private static void acceptConfig(Bundle extras) {
+        try {
+            ConfigSnapshot pushed = new ConfigSnapshot(ConfigSnapshot.valuesFromExtras(extras));
+            publish(pushed);
+            configWriter.execute(() -> {
+                try {
+                    ConfigFile.write(CONFIG_FILE, pushed);
+                } catch (Throwable e) {
+                    printLog("Config could not be saved: " + e);
+                }
+            });
+        } catch (Throwable e) {
+            printLog("Pushed config rejected, the previous one stays: " + e.getMessage());
+        }
+    }
+
+    private static void registerOnce(String name, Runnable registration) {
+        if (!registered.add(name)) return;
+        try {
+            registration.run();
+        } catch (RuntimeException e) {
+            registered.remove(name);
+            throw e;
         }
     }
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
-    private static synchronized void initReceiver() {
-        if (!isInitReceiver && context != null) {
-            isInitReceiver = true;
-
-            IntentFilter updateConfigIntentFilter = new IntentFilter();
-            updateConfigIntentFilter.addAction(ACTION_UPDATE_CONFIG);
-            updateConfigIntentFilter.addAction(ACTION_QUERY_STATUS);
-            if (Build.VERSION.SDK_INT >= 34) {
-                context.registerReceiver(new BroadcastReceiver() {
-                    public void onReceive(Context context, Intent intent) {
-                        String action = intent.getAction();
-                        if (ACTION_UPDATE_CONFIG.equals(action) && isConfigSender(this)) {
-                            onUpdateConfig();
-                        } else if (ACTION_QUERY_STATUS.equals(action) && isOrderedBroadcast() && isConfigSender(this)) {
-                            if (intent.getBooleanExtra(SelfCheck.EXTRA_CHECK, false)
-                                    && "android".equals(getSelfPackageName())) {
-                                answerSelfCheck(goAsync());
-                            } else {
-                                setResultExtras(addHookStatus(getResultExtras(true),
-                                        intent.getBooleanExtra(HookStatus.EXTRA_LOGS, false)));
-                            }
+    private static void initReceiver() {
+        if (Build.VERSION.SDK_INT < 34) {
+            logOnce("The app can only reach the hooks on Android 14+.");
+            return;
+        }
+        registerOnce("control", () -> {
+            IntentFilter filter = new IntentFilter();
+            filter.addAction(ACTION_UPDATE_CONFIG);
+            filter.addAction(ACTION_QUERY_STATUS);
+            context.registerReceiver(new BroadcastReceiver() {
+                public void onReceive(Context context, Intent intent) {
+                    String action = intent.getAction();
+                    if (ACTION_UPDATE_CONFIG.equals(action) && isConfigSender(this)) {
+                        if (ownsConfig()) acceptConfig(intent.getExtras());
+                    } else if (ACTION_QUERY_STATUS.equals(action) && isOrderedBroadcast() && isConfigSender(this)) {
+                        if (intent.getBooleanExtra(SelfCheck.EXTRA_CHECK, false) && ownsConfig()) {
+                            answerSelfCheck(goAsync());
+                        } else {
+                            setResultExtras(addHookStatus(getResultExtras(true),
+                                    intent.getBooleanExtra(HookStatus.EXTRA_LOGS, false)));
                         }
                     }
-                }, updateConfigIntentFilter, Context.RECEIVER_EXPORTED);
-            } else {
-                logOnce("Authenticated config refresh requires Android 14+; reboot to reload on older Android.");
-            }
+                }
+            }, filter, Context.RECEIVER_EXPORTED);
+        });
 
-            if ("android".equals(getSelfPackageName())) {
+        if (ownsConfig()) {
+            registerOnce("packages", () -> {
                 FcmConnectionMonitor.start(context);
                 IntentFilter packageFilter = new IntentFilter();
                 packageFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -252,28 +238,8 @@ public abstract class XposedModule {
                         }
                     }
                 }, packageFilter);
-            }
-
-            IntentFilter unInstallIntentFilter = new IntentFilter();
-            unInstallIntentFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
-            unInstallIntentFilter.addDataScheme("package");
-            context.registerReceiver(new BroadcastReceiver() {
-                public void onReceive(Context context, Intent intent) {
-                    String action = intent.getAction();
-                    if (Intent.ACTION_PACKAGE_REMOVED.equals(action) && MODULE_PACKAGE_NAME.equals(intent.getData().getSchemeSpecificPart())) {
-                        Bundle extras = intent.getExtras();
-                        if (extras.containsKey(Intent.EXTRA_REPLACING) && extras.getBoolean(Intent.EXTRA_REPLACING)) {
-                            return;
-                        }
-                        onUninstallFcmfix();
-                        if ("android".equals(getSelfPackageName())) {
-                            printLog("Fcmfix已卸载，重启后停止生效。");
-                        }
-                    }
-                }
-            }, unInstallIntentFilter);
+            });
         }
-
     }
 
     protected boolean isFCMAction(String action) {
@@ -286,7 +252,9 @@ public abstract class XposedModule {
         result.putStringArrayList(process + HookStatus.ACTIVE_SUFFIX, OplusHooks.STATUS.active());
         result.putStringArrayList(process + HookStatus.FAILED_SUFFIX, OplusHooks.STATUS.failed());
         result.putStringArrayList(process + HookStatus.SKIPPED_SUFFIX, OplusHooks.STATUS.skipped());
-        if ("android".equals(process)) {
+        result.putString(process + HookStatus.VERSION_SUFFIX, BuildInfo.VERSION + "+" + BuildInfo.COMMIT);
+        result.putBoolean(process + HookStatus.LATE_SUFFIX, lateInject);
+        if (ownsConfig()) {
             result.putBoolean(HookStatus.KEY_IGNORE_GMS_USER_SET, OplusBatteryNetworkFix.batteryIgnoresGmsUserSet());
         }
         return result;

@@ -3,10 +3,7 @@ package com.kooritea.fcmfix.libxposed;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 public final class XposedHelpers {
 
@@ -53,24 +50,6 @@ public final class XposedHelpers {
         } catch (NoSuchMethodException e) {
             throw new NoSuchMethodError(clazz.getName() + "#<init>");
         }
-    }
-
-    public static XC_MethodHook.Unhook findAndHookMethod(String className, ClassLoader classLoader,
-                                                          String methodName, Object... parameterTypesAndCallback) {
-        return findAndHookMethod(findClass(className, classLoader), methodName, parameterTypesAndCallback);
-    }
-
-    public static XC_MethodHook.Unhook findAndHookMethod(Class<?> clazz,
-                                                          String methodName, Object... parameterTypesAndCallback) {
-        ParsedHookArgs parsed = parseHookArgs(parameterTypesAndCallback);
-        Method method = findMethodExact(clazz, methodName, parsed.parameterTypes);
-        return XposedBridge.hookMethod(method, parsed.callback);
-    }
-
-    public static XC_MethodHook.Unhook findAndHookConstructor(Class<?> clazz, Object... parameterTypesAndCallback) {
-        ParsedHookArgs parsed = parseHookArgs(parameterTypesAndCallback);
-        Constructor<?> constructor = findConstructorExact(clazz, parsed.parameterTypes);
-        return XposedBridge.hookMethod(constructor, parsed.callback);
     }
 
     public static Object getObjectField(Object obj, String fieldName) {
@@ -149,23 +128,6 @@ public final class XposedHelpers {
         }
     }
 
-    private static ParsedHookArgs parseHookArgs(Object... parameterTypesAndCallback) {
-        if (parameterTypesAndCallback.length == 0 ||
-                !(parameterTypesAndCallback[parameterTypesAndCallback.length - 1] instanceof XC_MethodHook)) {
-            throw new IllegalArgumentException("Last argument must be XC_MethodHook callback");
-        }
-        XC_MethodHook callback = (XC_MethodHook) parameterTypesAndCallback[parameterTypesAndCallback.length - 1];
-        Class<?>[] parameterTypes = new Class<?>[parameterTypesAndCallback.length - 1];
-        for (int i = 0; i < parameterTypes.length; i++) {
-            Object type = parameterTypesAndCallback[i];
-            if (!(type instanceof Class<?>)) {
-                throw new IllegalArgumentException("Parameter type must be Class at index " + i);
-            }
-            parameterTypes[i] = (Class<?>) type;
-        }
-        return new ParsedHookArgs(parameterTypes, callback);
-    }
-
     private static Field findField(Class<?> clazz, String fieldName) {
         Class<?> current = clazz;
         while (current != null) {
@@ -232,15 +194,5 @@ public final class XposedHelpers {
         if (cls == short.class) return Short.class;
         if (cls == char.class) return Character.class;
         return cls;
-    }
-
-    private static final class ParsedHookArgs {
-        final Class<?>[] parameterTypes;
-        final XC_MethodHook callback;
-
-        ParsedHookArgs(Class<?>[] parameterTypes, XC_MethodHook callback) {
-            this.parameterTypes = parameterTypes;
-            this.callback = callback;
-        }
     }
 }

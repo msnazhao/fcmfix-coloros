@@ -11,8 +11,6 @@ import android.os.Bundle;
 import android.os.Process;
 import android.util.Log;
 
-import androidx.annotation.RequiresPermission;
-import androidx.core.content.ContextCompat;
 
 import java.util.Objects;
 
@@ -69,7 +67,7 @@ public class IceboxUtils extends BroadcastReceiver {
         return true;
     }
 
-    @RequiresPermission(SDK_PERMISSION)
+    /** Needs the Ice Box SDK permission. */
     public static void enableApp(Context context, boolean enable, String... packageNames) {
         int userHandle = Process.myUserHandle().hashCode();
         Bundle extra = new Bundle();
@@ -83,7 +81,7 @@ public class IceboxUtils extends BroadcastReceiver {
     public static void activeApp(Context context, String pkg) {
         try {
             if (!isIceBoxWorking) {
-                if (ContextCompat.checkSelfPermission(context, SDK_PERMISSION) != PackageManager.PERMISSION_GRANTED) {
+                if (context.checkSelfPermission(SDK_PERMISSION) != PackageManager.PERMISSION_GRANTED) {
                     Log.e(TAG, "[icebox] need permission " + pkg);
                     return;
                 }

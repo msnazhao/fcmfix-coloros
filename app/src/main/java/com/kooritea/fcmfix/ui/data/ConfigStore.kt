@@ -5,9 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import com.kooritea.fcmfix.util.ConfigSnapshot
-import io.github.libxposed.service.XposedService
 
-/** The options in LSPosed's remote preferences; system_server reads them through ConfigSnapshot. */
+/** The options the user set; system_server reads them through ConfigSnapshot. */
 data class ModuleConfig(
     val allowList: Set<String> = emptySet(),
     /** FCM apps unticked while auto-allow is on. */
@@ -46,42 +45,56 @@ data class ModuleConfig(
     }
 }
 
+/**
+ * The config lives in this app's own preferences. system_server keeps its own copy on disk and
+ * only changes it when this app pushes a new one, so the two can be told apart in the status.
+ */
 object ConfigStore {
     private const val PREFERENCES = "config"
+    private const val SAVED = "init"
 
-    /** Binder call; throws when LSPosed cannot provide the preferences. */
-    fun load(service: XposedService): ModuleConfig {
-        val pref = service.getRemotePreferences(PREFERENCES)
+    private fun preferences(context: Context) = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+
+    /** False on a fresh install, and after the app's data was cleared. */
+    fun hasSaved(context: Context): Boolean = preferences(context).getBoolean(SAVED, false)
+
+    fun load(context: Context): ModuleConfig {
+        val preferences = preferences(context)
         return ModuleConfig(
-            allowList = pref.getStringSet("allowList", null).orEmpty().toSet(),
-            excludeList = pref.getStringSet("excludeList", null).orEmpty().toSet(),
-            autoAllowFcm = pref.getBoolean(ConfigSnapshot.AUTO_ALLOW_FCM, false),
-            keepNotifications = pref.getBoolean("disableAutoCleanNotification", false),
-            iceBox = pref.getBoolean("includeIceBoxDisableApp", false),
+            allowList = preferences.getStringSet(ConfigSnapshot.ALLOW_LIST, null).orEmpty().toSet(),
+            excludeList = preferences.getStringSet(ConfigSnapshot.EXCLUDE_LIST, null).orEmpty().toSet(),
+            autoAllowFcm = preferences.getBoolean(ConfigSnapshot.AUTO_ALLOW_FCM, false),
+            keepNotifications = preferences.getBoolean(ConfigSnapshot.KEEP_NOTIFICATIONS, false),
+            iceBox = preferences.getBoolean(ConfigSnapshot.ICE_BOX, false),
         )
     }
 
-    /**
-     * Writes every key and tells the hooked processes to reload. Returns false when they cannot
-     * be told (Android 13 and older) and the change needs a reboot; throws on a failed write.
-     */
-    fun save(context: Context, service: XposedService, config: ModuleConfig): Boolean {
-        val saved = service.getRemotePreferences(PREFERENCES).edit()
-            .putBoolean("init", true)
-            .putStringSet("allowList", HashSet(config.allowList))
-            .putStringSet("excludeList", HashSet(config.excludeList))
+    /** Saves the config here, then tells system_server. Throws when the write fails. */
+    fun save(context: Context, config: ModuleConfig) {
+        val saved = preferences(context).edit()
+            .putBoolean(SAVED, true)
+            .putStringSet(ConfigSnapshot.ALLOW_LIST, HashSet(config.allowList))
+            .putStringSet(ConfigSnapshot.EXCLUDE_LIST, HashSet(config.excludeList))
             .putBoolean(ConfigSnapshot.AUTO_ALLOW_FCM, config.autoAllowFcm)
-            .putBoolean("disableAutoCleanNotification", config.keepNotifications)
-            .putBoolean("includeIceBoxDisableApp", config.iceBox)
-            // Left behind by the removed no-response notification option.
-            .remove("noResponseNotification")
+            .putBoolean(ConfigSnapshot.KEEP_NOTIFICATIONS, config.keepNotifications)
+            .putBoolean(ConfigSnapshot.ICE_BOX, config.iceBox)
             .commit()
         check(saved) { "配置写入失败" }
-        if (Build.VERSION.SDK_INT < 34) return false
-        context.sendBroadcast(
-            Intent(context.packageName + ".update.config"), null,
-            BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle(),
-        )
-        return true
+        push(context, config)
+    }
+
+    /**
+     * Sends the whole config to system_server with this app's identity attached, which is what
+     * system_server checks. Nothing answers when the module is not loaded; the status shows that.
+     */
+    fun push(context: Context, config: ModuleConfig) {
+        if (Build.VERSION.SDK_INT < 34) return
+        val intent = Intent(context.packageName + ".update.config")
+            .putExtra(ConfigSnapshot.ALLOW_LIST, config.allowList.toTypedArray())
+            .putExtra(ConfigSnapshot.EXCLUDE_LIST, config.excludeList.toTypedArray())
+            .putExtra(ConfigSnapshot.AUTO_ALLOW_FCM, config.autoAllowFcm)
+            .putExtra(ConfigSnapshot.KEEP_NOTIFICATIONS, config.keepNotifications)
+            .putExtra(ConfigSnapshot.ICE_BOX, config.iceBox)
+        context.sendBroadcast(intent, null, BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle())
     }
 }

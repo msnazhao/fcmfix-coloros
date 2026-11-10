@@ -5,11 +5,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import com.kooritea.fcmfix.ui.data.IconSource
 import com.kooritea.fcmfix.ui.data.InstalledApp
 import com.kooritea.fcmfix.ui.data.ModuleConfig
-import com.kooritea.fcmfix.ui.data.ModuleConnection
 import com.kooritea.fcmfix.ui.model.AppCheck
 import com.kooritea.fcmfix.ui.model.HookGroups
 import com.kooritea.fcmfix.ui.model.LocalConfig
-import com.kooritea.fcmfix.ui.model.ModuleInfo
 import com.kooritea.fcmfix.ui.model.ReportEnv
 import com.kooritea.fcmfix.ui.model.StatusReport
 import com.kooritea.fcmfix.ui.model.StatusSnapshot
@@ -17,10 +15,11 @@ import com.kooritea.fcmfix.util.SelfCheck
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-/** States for the UI tests: a healthy phone, one with problems, and LSPosed still connecting. */
+/** States for the UI tests: a healthy phone, one with problems, one with no module, and loading. */
 object Samples {
     val now = System.currentTimeMillis()
     private const val MINUTE = 60_000L
+    private const val VERSION = "13.2-zygisk+abc1234"
 
     fun relativeTime(time: Long): String {
         val minutes = (now - time) / MINUTE
@@ -60,11 +59,11 @@ object Samples {
                 "OplusDeviceIdleFix", "OsenseResManager", "HansJobExemption", "FcmConnectionMonitor", "SelfCheckCollector",
                 "NetworkPolicy",
             ),
-            emptyList(), emptyList(),
+            emptyList(), emptyList(), VERSION,
         ),
         "com.oplus.battery" to HookGroups(
             listOf("GoogleRestrictionController", "RestrictBroadcast", "IgnoreGmsUserSet", "DeepSleepWhitelist"),
-            emptyList(), null,
+            emptyList(), null, VERSION,
         ),
     )
 
@@ -117,25 +116,21 @@ object Samples {
         ),
     )
 
-    private val module = ModuleInfo("LSPosed 1.10.2", 101, emptyList())
-
-    private fun report(status: StatusSnapshot, module: ModuleInfo? = this.module) = StatusReport.build(
-        ReportEnv(module, 36, "PLK110_17.0.0.105(CN01)", "13.2", LocalConfig(allowed.size, false), now, { name ->
-            apps.firstOrNull { it.packageName == name }?.label ?: name
-        }, ::relativeTime),
+    private fun report(status: StatusSnapshot, config: ModuleConfig? = this.config) = StatusReport.build(
+        ReportEnv(
+            36, "PJE110_16.0.2.400(CN01)", "13.2",
+            config?.let { LocalConfig(it.allowList.size, it.autoAllowFcm) }, now,
+            { name -> apps.firstOrNull { it.packageName == name }?.label ?: name }, ::relativeTime,
+        ),
         status,
     )
 
-    fun healthy() = AppUiState(
-        ModuleConnection.State.Missing, config, apps, report(healthySnapshot), versionName = "13.2",
-    )
+    fun healthy() = AppUiState(config, apps, report(healthySnapshot), versionName = "13.2")
 
-    fun problems() = AppUiState(
-        ModuleConnection.State.Missing, config, apps,
-        report(problemSnapshot, module.copy(missingScopes = listOf("com.oplus.battery"))), versionName = "13.2",
-    )
+    fun problems() = AppUiState(config, apps, report(problemSnapshot), versionName = "13.2")
 
-    fun inactive() = AppUiState(ModuleConnection.State.Missing, null, apps, report(StatusSnapshot(), null), versionName = "13.2")
+    /** No module answered: the status query came back empty. */
+    fun inactive() = AppUiState(null, apps, report(StatusSnapshot(), null), versionName = "13.2")
 
-    fun loading() = AppUiState(ModuleConnection.State.Connecting, null, null, null, versionName = "13.2")
+    fun loading() = AppUiState(null, null, null, versionName = "13.2")
 }

@@ -13,7 +13,6 @@ import com.kooritea.fcmfix.ui.data.ConfigStore
 import com.kooritea.fcmfix.ui.data.InstalledApp
 import com.kooritea.fcmfix.ui.data.InstalledApps
 import com.kooritea.fcmfix.ui.data.ModuleConfig
-import com.kooritea.fcmfix.ui.data.ModuleConnection
 import com.kooritea.fcmfix.ui.data.ReportExporter
 import com.kooritea.fcmfix.ui.data.StatusQuery
 import com.kooritea.fcmfix.ui.model.LocalConfig
@@ -21,7 +20,6 @@ import com.kooritea.fcmfix.ui.model.ReportEnv
 import com.kooritea.fcmfix.ui.model.StatusReport
 import com.kooritea.fcmfix.ui.model.StatusSnapshot
 import com.kooritea.fcmfix.util.HookStatus
-import io.github.libxposed.service.XposedService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -59,18 +57,16 @@ sealed interface ExportState {
 }
 
 /**
- * State of the module app: LSPosed binding, the config in LSPosed's remote preferences, the
- * installed apps, and the self-check answered by the hooked system_server and Battery.
+ * State of the module app: the config it keeps, the installed apps, and the self-check answered
+ * by the hooked system_server and Battery.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel(application: Application) : AndroidViewModel(application), AppActions {
     private val app: Application get() = getApplication()
 
-    val connection: StateFlow<ModuleConnection.State> = ModuleConnection.state
-
     private val mutableConfig = MutableStateFlow<ModuleConfig?>(null)
 
-    /** Null until read from LSPosed, and while the module is not active. */
+    /** Null only until the preferences have been read. */
     val config: StateFlow<ModuleConfig?> = mutableConfig.asStateFlow()
 
     private val mutableApps = MutableStateFlow<List<InstalledApp>?>(null)
@@ -87,10 +83,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
     private val answer = MutableStateFlow<Answer?>(null)
 
     /** Null until the first status query returns. */
-    val report: StateFlow<StatusReport?> = combine(answer, connection, mutableApps) { answer, connection, apps ->
-        Triple(answer, connection, apps)
-    }.mapLatest { (answer, connection, apps) ->
-        answer?.let { buildReport(it, connection, apps) }
+    val report: StateFlow<StatusReport?> = combine(answer, mutableApps) { answer, apps ->
+        answer to apps
+    }.mapLatest { (answer, apps) ->
+        answer?.let { buildReport(it, apps) }
     }.flowOn(Dispatchers.IO).stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val mutableRefreshing = MutableStateFlow(false)
@@ -131,29 +127,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
     private var delayedRefresh: Job? = null
 
     init {
-        ModuleConnection.start()
         viewModelScope.launch {
-            connection.collect { state ->
-                when (state) {
-                    is ModuleConnection.State.Bound -> {
-                        mutableConfig.value = withContext(Dispatchers.IO) { loadConfig(state.service) }
-                        // The answer so far was compared with no config; ask again.
-                        refreshJob?.join()
-                        refreshStatus()
-                    }
-                    ModuleConnection.State.Missing -> mutableConfig.value = null
-                    ModuleConnection.State.Connecting -> Unit
-                }
+            val config = withContext(Dispatchers.IO) { ConfigStore.load(app) }
+            mutableConfig.value = config
+            // system_server keeps its own copy. Send ours at every start, so a module that was
+            // just flashed gets the config; a fresh install has nothing to send and must not
+            // overwrite the copy system_server still has.
+            if (withContext(Dispatchers.IO) { ConfigStore.hasSaved(app) }) {
+                ConfigStore.push(app, config)
+                delay(800)
             }
+            // The answer so far was compared with no config; ask again.
+            refreshJob?.join()
+            refreshStatus()
         }
         scanApps()
-    }
-
-    private fun loadConfig(service: XposedService): ModuleConfig? = try {
-        ConfigStore.load(service)
-    } catch (e: Throwable) {
-        Log.e(TAG, "loadConfig", e)
-        null
     }
 
     /** Called on every resume: pushes may have arrived, or a setting was changed elsewhere. */
@@ -171,7 +159,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
         }
     }
 
-    /** After a config change, once system_server has had a moment to reload it. */
+    /** After a config change, once system_server has had a moment to take it in. */
     private fun refreshSoon() {
         delayedRefresh?.cancel()
         delayedRefresh = viewModelScope.launch {
@@ -189,11 +177,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
                 val scanned = withContext(Dispatchers.IO) { InstalledApps.scan(app.packageManager) }
                 // Allowed apps go first, so wait briefly for the config; the order then stays put
                 // while apps are ticked and unticked.
-                val config = withTimeoutOrNull(5000) {
-                    combine(mutableConfig, connection) { config, state -> config to state }
-                        .first { (config, state) -> config != null || state == ModuleConnection.State.Missing }
-                        .first
-                }
+                val config = withTimeoutOrNull(5000) { mutableConfig.first { it != null } }
                 mutableApps.value = scanned.sortedBy { config?.allows(it.packageName, it.includeFcm) != true }
                 if (scanned.size <= 1) mutableAppListUnreadable.value = true
             } finally {
@@ -206,11 +190,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
         mutableAppListUnreadable.value = false
     }
 
-    private fun buildReport(answer: Answer, connection: ModuleConnection.State, apps: List<InstalledApp>?): StatusReport {
-        val module = (connection as? ModuleConnection.State.Bound)?.let { ModuleConnection.moduleInfo(it.service) }
+    private fun buildReport(answer: Answer, apps: List<InstalledApp>?): StatusReport {
         val labels = apps?.associate { it.packageName to it.label }
         val env = ReportEnv(
-            module = module,
             sdkInt = Build.VERSION.SDK_INT,
             display = Build.DISPLAY,
             versionName = versionName,
@@ -243,23 +225,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
         updateConfig { it.copy(allowList = it.allowList + fcm) }
     }
 
-    /** Writes synchronously like before: each change is one small binder call to LSPosed. */
     private fun updateConfig(change: (ModuleConfig) -> ModuleConfig) {
-        val service = (connection.value as? ModuleConnection.State.Bound)?.service
         val current = mutableConfig.value
-        if (service == null || current == null) {
-            message(
-                if (connection.value == ModuleConnection.State.Missing) "模块未激活，无法保存：请先在 LSPosed 中启用 FCMFix"
-                else "LSPosed 配置正在加载，请稍后再试",
-            )
+        if (current == null) {
+            message("配置正在加载，请稍后再试")
             return
         }
         val next = change(current)
         if (next == current) return
         try {
-            val live = ConfigStore.save(app, service, next)
+            ConfigStore.save(app, next)
             mutableConfig.value = next
-            if (!live) message("配置已保存；Android 14 以下需重启手机生效")
             refreshSoon()
         } catch (e: Throwable) {
             Log.e(TAG, "updateConfig", e)
@@ -269,27 +245,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application), A
 
     fun dismissConfigError() {
         mutableConfigError.value = null
-    }
-
-    /** LSPosed asks the user to approve through a notification; hooks still need a reboot. */
-    override fun requestScope(scopes: List<String>) {
-        val service = (connection.value as? ModuleConnection.State.Bound)?.service ?: return
-        try {
-            service.requestScope(scopes, object : XposedService.OnScopeEventListener {
-                override fun onScopeRequestApproved(approved: List<String>) {
-                    message("作用域已添加，重启手机后生效")
-                    viewModelScope.launch { refreshStatus() }
-                }
-
-                override fun onScopeRequestFailed(reason: String) {
-                    message("申请失败：$reason。请在 LSPosed 中手动勾选")
-                }
-            })
-            message("已向 LSPosed 申请，请在弹出的通知中确认")
-        } catch (e: Throwable) {
-            Log.w(TAG, "requestScope", e)
-            message("申请失败，请在 LSPosed 中手动勾选作用域")
-        }
     }
 
     override fun copyText(): String? = report.value?.toText()

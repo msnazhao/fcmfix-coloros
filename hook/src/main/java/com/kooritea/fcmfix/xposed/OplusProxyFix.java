@@ -213,6 +213,16 @@ public class OplusProxyFix extends XposedModule {
             return;
         }
 
+        // After a late load the constructor has already run; the framework keeps the instance.
+        try {
+            Object existing = XposedHelpers.getStaticObjectField(wakeLockClass, "sInstance");
+            if (existing != null) {
+                sOplusProxyWakeLock = existing;
+                printLog("OplusProxyWakeLock instance read from sInstance");
+            }
+        } catch (Throwable ignored) {
+        }
+
         int constructorHooks = 0;
         for (Constructor<?> constructor : wakeLockClass.getDeclaredConstructors()) {
             constructor.setAccessible(true);
