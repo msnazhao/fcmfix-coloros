@@ -75,7 +75,8 @@ bool Decompress(const uint8_t *in, size_t in_size, std::vector<uint8_t> &out) {
 }  // namespace
 
 std::unique_ptr<ElfSymbols> ElfSymbols::Open(std::string_view path_suffix) {
-    LoadedObject object{.suffix = path_suffix};
+    LoadedObject object;
+    object.suffix = path_suffix;
     if (dl_iterate_phdr(FindLoadedObject, &object) == 0) return nullptr;
 
     int fd = open(object.path.c_str(), O_RDONLY | O_CLOEXEC);

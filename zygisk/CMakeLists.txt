@@ -44,6 +44,12 @@ set_source_files_properties(src/dex_blob.S PROPERTIES
         OBJECT_DEPENDS "${FCMFIX_DEX}")
 target_compile_options(${PROJECT_NAME} PRIVATE
         -Wall -Wextra -fvisibility=hidden -fvisibility-inlines-hidden)
-# Only zygisk_module_entry is exported; nothing from the static libraries leaks out.
-target_link_options(${PROJECT_NAME} PRIVATE -Wl,--exclude-libs,ALL -Wl,--gc-sections)
+# Only zygisk_module_entry is exported. The version script is what hides the weak RTTI
+# symbols of std::function, which -fvisibility=hidden and --exclude-libs leave visible.
+target_link_options(${PROJECT_NAME} PRIVATE
+        -Wl,--exclude-libs,ALL
+        -Wl,--gc-sections
+        -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/src/exports.map)
+set_target_properties(${PROJECT_NAME} PROPERTIES
+        LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/exports.map)
 target_link_libraries(${PROJECT_NAME} PRIVATE lsplant_static dobby_static xz_static log)

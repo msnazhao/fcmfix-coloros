@@ -94,18 +94,21 @@ bool Inject(JNIEnv *env, bool system_server, bool late, jstring process_name) {
         return false;
     }
 
-    static const lsplant::InitInfo init_info{
-        .inline_hooker = [](void *target, void *replacement) -> void * {
+    static const lsplant::InitInfo init_info = [] {
+        lsplant::InitInfo info;
+        info.inline_hooker = [](void *target, void *replacement) -> void * {
             void *backup = nullptr;
             return DobbyHook(target, replacement, &backup) == 0 ? backup : nullptr;
-        },
-        .inline_unhooker = [](void *target) { return DobbyDestroy(target) == 0; },
-        .art_symbol_resolver = [](std::string_view name) { return g_art->Find(name); },
-        .art_symbol_prefix_resolver =
-            [](std::string_view prefix) { return g_art->FindPrefix(prefix); },
-        .generated_class_name = "FcmFixHook_",
-        .generated_source_name = "fcmfix",
-    };
+        };
+        info.inline_unhooker = [](void *target) { return DobbyDestroy(target) == 0; };
+        info.art_symbol_resolver = [](std::string_view name) { return g_art->Find(name); };
+        info.art_symbol_prefix_resolver = [](std::string_view prefix) {
+            return g_art->FindPrefix(prefix);
+        };
+        info.generated_class_name = "FcmFixHook_";
+        info.generated_source_name = "fcmfix";
+        return info;
+    }();
     if (!lsplant::Init(env, init_info)) {
         LOGE("ART hook engine failed to start (%zu libart symbols read); nothing hooked",
              g_art->symbol_count());
