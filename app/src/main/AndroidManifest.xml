@@ -9,6 +9,8 @@
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
+    <!-- ColorOS's own permission: without it the system shows this app no other app at all. -->
+    <uses-permission android:name="com.android.permission.GET_INSTALLED_APPS" />
     <uses-permission android:name="com.catchingnow.icebox.SDK" />
     <uses-permission android:name="web1n.stopapp.permission.disable_api" />
 
