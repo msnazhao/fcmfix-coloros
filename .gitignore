@@ -9,3 +9,6 @@
 .externalNativeBuild
 .cxx
 .runtime/
+# Vendor firmware files used for static analysis; not ours to publish.
+/firmware/
+/zygisk/build/

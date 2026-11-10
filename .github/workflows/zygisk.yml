@@ -1,0 +1,56 @@
+name: Zygisk module
+on:
+  push:
+    branches: [zygisk]
+    paths:
+      - "zygisk/**"
+      - ".gitmodules"
+      - ".github/workflows/zygisk.yml"
+  pull_request:
+    paths:
+      - "zygisk/**"
+      - ".gitmodules"
+      - ".github/workflows/zygisk.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  # The NDK the pinned LSPlant commit declares (gradle/libs.versions.toml).
+  NDK_VERSION: 29.0.14206865
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version: '21'
+          distribution: temurin
+      - name: Install NDK and platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "ndk;$NDK_VERSION" "platforms;android-36" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          command -v ninja > /dev/null || sudo apt-get install -y ninja-build
+          cmake --version
+          ninja --version
+      - name: Build
+        run: bash zygisk/build.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fcmfix-coloros-zygisk
+          path: |
+            zygisk/build/*.zip
+            zygisk/build/SHA256SUMS
+          retention-days: 14
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: symbols
+          path: zygisk/build/libfcmfix_zygisk.unstripped.so
+          retention-days: 14

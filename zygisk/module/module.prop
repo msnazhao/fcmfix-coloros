@@ -1,0 +1,6 @@
+id=fcmfix_coloros
+name=FCMFix ColorOS
+version=@VERSION@
+versionCode=@VERSION_CODE@
+author=ByteJuno
+description=Lets Google FCM pushes reach stopped apps on ColorOS 16 / 17 (CN). Needs NeoZygisk.

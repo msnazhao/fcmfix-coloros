@@ -1,0 +1,6 @@
+# No semicolon anywhere in this file, comments included. ksud splits it on newlines and on
+# semicolons, and the tail of a split comment is parsed as a rule and aborts the install.
+
+# The ART hook engine patches code inside system_server. NeoZygisk grants the same rule, and
+# it is repeated here so that this module does not depend on NeoZygisk's own policy file.
+allow system_server system_server process execmem

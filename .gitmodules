@@ -1,0 +1,9 @@
+[submodule "zygisk/external/lsplant"]
+	path = zygisk/external/lsplant
+	url = https://github.com/JingMatrix/LSPlant.git
+[submodule "zygisk/external/dobby"]
+	path = zygisk/external/dobby
+	url = https://github.com/JingMatrix/Dobby.git
+[submodule "zygisk/external/xz-embedded"]
+	path = zygisk/external/xz-embedded
+	url = https://github.com/tukaani-project/xz-embedded.git
