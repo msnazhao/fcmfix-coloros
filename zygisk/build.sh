@@ -74,6 +74,8 @@ STAGE=$OUT/module
 cp -r "$ROOT/zygisk/module" "$STAGE"
 mkdir -p "$STAGE/zygisk"
 cp "$LIB" "$STAGE/zygisk/$ABI.so"
+# The manager may run action.sh and the boot scripts directly; do not rely on the installer alone.
+chmod 0755 "$STAGE"/*.sh
 REPO=${GITHUB_REPOSITORY:-msnazhao/fcmfix-coloros}
 sed -i "s/@VERSION@/$VERSION+$COMMIT/; s/@VERSION_CODE@/$VERSION_CODE/; s|@REPO@|$REPO|" "$STAGE/module.prop"
 
