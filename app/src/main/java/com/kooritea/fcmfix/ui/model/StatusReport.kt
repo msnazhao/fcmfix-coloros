@@ -253,12 +253,12 @@ class StatusReport private constructor(
             val title = "$label Hook"
             when {
                 active == null || failed == null -> add(
-                    Level.FAIL, title, "未加载", "重启手机；仍然未加载时，请导出完整报告反馈", copyExtra = copyExtra,
+                    Level.FAIL, title, "未加载", "重启手机；仍然未加载时，请导出报告反馈", copyExtra = copyExtra,
                 )
                 failed.isNotEmpty() -> add(
                     Level.WARN, title,
                     "${active.size} 项生效$skippedSummary，${failed.size} 项失配\n" + failed.joinToString("\n"),
-                    "失配的项目与当前固件不匹配，请导出完整报告反馈", copyExtra = copyExtra,
+                    "失配的项目与当前固件不匹配，请导出报告反馈", copyExtra = copyExtra,
                 )
                 else -> add(Level.OK, title, "${active.size} 项生效$skippedSummary", null, copyExtra = copyExtra)
             }
@@ -279,8 +279,7 @@ class StatusReport private constructor(
                     val automatic = status.appChecks.values.count { it.auto }
                     add(
                         Level.INFO, "自动放行",
-                        "已开启，系统框架识别到 ${status.fcmPackages} 个包含 FCM 的应用，其中 $automatic 个已自动放行",
-                        if (automatic < status.fcmPackages) "其余的是你在“应用”页关闭了的应用，或已在手动列表中" else null,
+                        "已开启，系统框架识别到 ${status.fcmPackages} 个包含 FCM 的应用，其中 $automatic 个已自动放行", null,
                     )
                 }
             }

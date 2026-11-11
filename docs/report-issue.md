@@ -16,7 +16,7 @@ FCMFix-Zygisk 的日志在系统 logcat 中（标签 `fcmfix`）。root 管理�
 
 ## 2. 导出报告（需要 Root）
 
-复现问题后，在“应用”页点开收不到通知的应用，点“导出报告”；或在“状态”页底部点“导出完整报告”，选择应用。授予 Root 后分享或保存。
+复现问题后，在“应用”页点开收不到通知的应用，点“导出报告”；或在“状态”页底部点“导出报告”，选择应用。授予 Root 后分享或保存。
 
 打不开 FCMFix 时，可以手动运行 [`collect-report.sh`](../scripts/collect-report.sh)：保存到手机的 `Download` 目录，在 Termux 或 `adb shell` 中执行两次。
 

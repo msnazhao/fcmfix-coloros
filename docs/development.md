@@ -78,7 +78,11 @@ Hook 尽量挂在 Binder 入口、跨 jar 调用的服务方法或体积较大�
 
 - Action 按钮运行模块里的 `action.sh`：检查模块是否启用、应用是否安装且版本一致，
   并读取 system_server 在 `/data/system/fcmfix/run.properties` 留下的本次开机记录（版本、是否晚加载、生效与失配的 Hook 数量）。
-  记录里的 pid 与当前 system_server 不同，说明本次启动模块没有加载。
-  Zygisk 实现只作提示：是 NeoZygisk 显示“已验证”，否则显示“未验证”，两者都不计入异常，是否加载以上面的记录为准。
-  脚本只读，不改任何东西。
+  记录里的 pid 与当前 system_server 不同，说明本次启动模块没有加载。输出一行一项，用 ✅ ⚠️ ❌ 标记；
+  Zygisk 实现只有不是 NeoZygisk 时才显示“未验证”，不计入异常。
+- 模块名下面的说明行不写介绍，写状态，格式参考 bindhosts，例如 `状态：运行中 ✅ | Hook 14 项`。
+  `service.sh` 在开机后等到 system_server 写好记录再更新一次，Action 按钮每次运行也会更新；`common.sh` 是两者共用的逻辑。
+  更新的只是 `module.prop` 的 `description` 一行。
+- 升级检查：`module.prop` 的 `updateJson` 指向最新正式版 Release 里的 `update.json`，root 管理器打开模块页时读取它，
+  `versionCode` 比已安装的大就提示更新。所以每次发布 `versionCode` 都必须加 1。
 - 配置按钮（WebUI，`webroot/index.html`）调用 root 管理器的 `ksu.exec` 执行 `am start` 打开应用。

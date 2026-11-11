@@ -87,7 +87,7 @@ class StatusReportTest {
         val row = StatusReport.build(env(), status).rows.single { it.title == "系统框架 Hook" }
         assertEquals(Level.WARN, row.level)
         assertEquals("1 项生效，1 项不适用，1 项失配\nB: no method", row.detail)
-        assertEquals("失配的项目与当前固件不匹配，请导出完整报告反馈", row.hint)
+        assertEquals("失配的项目与当前固件不匹配，请导出报告反馈", row.hint)
         assertEquals("生效：A\n不适用：C: absent", row.copyExtra)
     }
 
@@ -111,10 +111,7 @@ class StatusReportTest {
         )
         val row = StatusReport.build(env(), status).rows.single { it.title == "自动放行" }
         assertEquals("已开启，系统框架识别到 3 个包含 FCM 的应用，其中 1 个已自动放行", row.detail)
-        assertEquals("其余的是你在“应用”页关闭了的应用，或已在手动列表中", row.hint)
-
-        val all = status.copy(fcmPackages = 1, apps = listOf("auto"), appChecks = status.appChecks - "manual")
-        assertNull(StatusReport.build(env(), all).rows.single { it.title == "自动放行" }.hint)
+        assertNull(row.hint)
     }
 
     @Test

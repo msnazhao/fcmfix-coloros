@@ -104,7 +104,7 @@ fun SettingsScreen(
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         leadingContent = { LevelIcon(Level.INFO) },
                         headlineContent = { Text("FCMFix-Zygisk ${state.versionName}", fontWeight = FontWeight.Medium) },
-                        supportingContent = { Text("基于上游 ByteJuno/fcmfix-coloros，支持 NeoZygisk。模块里带着本应用") },
+                        supportingContent = { Text("让 Google FCM 推送到达国行 ColorOS 16/17 上被停止的应用，已验证 NeoZygisk。基于 ByteJuno/fcmfix-coloros 项目二次开发。") },
                     )
                     RowDivider()
                     ActionRow(R.drawable.ic_code, "项目主页", "github.com/msnazhao/fcmfix-coloros", trailing = R.drawable.ic_open_in_new) {

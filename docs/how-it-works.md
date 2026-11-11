@@ -85,5 +85,5 @@ FCM 连接由 netlink `sock_diag` 每分钟采样一次（系统框架不能读 
 
 “时间线”页还记录亮灭屏、深度 Doze、默认网络切换和推送，连接与系统事件最多 300 条，推送最多 150 条。采样不会唤醒设备。
 
-“导出完整报告”用 Root 运行打包在 APK 中的 [`collect-report.sh`](../scripts/collect-report.sh)，只读取状态和日志，并附上自查结果和模块保留在内存中的最近 1000 条日志。
+“导出报告”用 Root 运行打包在 APK 中的 [`collect-report.sh`](../scripts/collect-report.sh)，只读取状态和日志，并附上自查结果和模块保留在内存中的最近 1000 条日志。
 有些机型的 logcat 只能保留几分钟，这部分日志不受影响。

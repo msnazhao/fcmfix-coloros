@@ -4,6 +4,9 @@
 MODDIR=${0%/*}
 COUNT_FILE="$MODDIR/.boot_count"
 
+# The status line the root manager shows under the module name, once this boot's record is in.
+( . "$MODDIR/common.sh"; fcmfix_apply_when_ready ) &
+
 # A system_server that keeps dying restarts zygote without rebooting the kernel, so
 # post-fs-data.sh never runs again and its count never grows. Watch for that here.
 last_pid=

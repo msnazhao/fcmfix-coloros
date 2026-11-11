@@ -192,7 +192,7 @@ private fun ExportDialogs(export: ExportState, viewModel: MainViewModel) {
         is ExportState.Failed -> AlertDialog(
             onDismissRequest = viewModel::dismissExport,
             title = { Text("导出失败") },
-            text = { Text(export.message + "\n\n导出完整报告需要 Root。没有 Root 时，可以先用“复制结果”反馈自查内容。") },
+            text = { Text(export.message + "\n\n导出报告需要 Root。没有 Root 时，可以先用“复制结果”反馈自查内容。") },
             confirmButton = { TextButton(onClick = viewModel::dismissExport) { Text("确定") } },
         )
         is ExportState.Done -> AlertDialog(

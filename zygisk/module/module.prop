@@ -3,5 +3,5 @@ name=FCMFix-Zygisk
 version=@VERSION@
 versionCode=@VERSION_CODE@
 author=msnazhao
-description=让 Google FCM 推送到达 ColorOS 16 / 17 国行上被停止的应用。已验证 NeoZygisk。基于上游 ByteJuno/fcmfix-coloros。
+description=状态：已安装，重启后生效 🔄
 updateJson=https://github.com/@REPO@/releases/latest/download/update.json

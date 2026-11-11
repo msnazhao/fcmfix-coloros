@@ -75,7 +75,7 @@ fun blocks(rows: List<Row>): List<Block> {
 fun StatusTab(state: AppUiState, actions: AppActions, nav: Navigation, modifier: Modifier = Modifier) {
     val report = state.report
     TabScaffold(
-        title = { Text("FCMFix") },
+        title = { Text("FCMFix-Zygisk") },
         modifier = modifier,
         actions = {
             IconButton(onClick = actions::refreshStatus) { Icon(painterResource(R.drawable.ic_refresh), contentDescription = "刷新") }
@@ -155,7 +155,7 @@ fun SummaryCard(summary: Summary?, modifier: Modifier = Modifier) {
 private fun FeedbackCard(onCopy: () -> Unit, onExport: () -> Unit) {
     GroupCard {
         Text(
-            "反馈问题时请附上自查结果。有 Root 时可以导出完整报告，其中还有系统日志。",
+            "反馈问题时请附上自查结果。有 Root 时可以导出报告，其中还有系统日志。",
             Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -172,7 +172,7 @@ private fun FeedbackCard(onCopy: () -> Unit, onExport: () -> Unit) {
             FilledTonalButton(onClick = onExport, modifier = Modifier.weight(1f)) {
                 Icon(painterResource(R.drawable.ic_report), contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("导出完整报告")
+                Text("导出报告")
             }
         }
     }

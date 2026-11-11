@@ -1,118 +1,56 @@
 #!/system/bin/sh
-# Run by the root manager's Action button: is the module installed, is the app installed, and
-# did system_server load the hooks this boot. Read-only: it changes nothing.
+# Run by the root manager's Action button. Read-only, except that it refreshes the status line
+# under the module name.
 MODDIR=${0%/*}
-PKG=io.github.artifical0.fcmfix.coloros
-RECORD=/data/system/fcmfix/run.properties
-NEOZYGISK=/data/adb/modules/zygisksu
+. "$MODDIR/common.sh"
 
-problems=0
-ok() { echo "[正常] $1"; }
-bad() { echo "[异常] $1"; problems=$((problems + 1)); }
-note() { echo "       $1"; }
-info() { echo "[提示] $1"; }
+ok() { echo "✅ $1"; }
+warn() { echo "⚠️ $1"; }
+bad() { echo "❌ $1"; }
 
-prop() { sed -n "s/^$1=//p" "$MODDIR/module.prop" | sed -n 1p; }
+fcmfix_collect
+echo "FCMFix-Zygisk $(prop_value version)"
 
-echo "FCMFix-Zygisk $(prop version)"
-echo
+case "$MODULE" in
+  off) bad "模块已停用" ;;
+  nolib) bad "缺少注入库，请重新刷入" ;;
+  *) ok "模块已启用" ;;
+esac
 
-echo "== 模块"
-if [ -f "$MODDIR/disable" ]; then
-  bad "模块已被停用（手动停用，或启动保护连续检测到开机失败后自动停用）"
-  note "在 root 管理器里重新启用，然后重启手机"
-elif [ -f "$MODDIR/remove" ]; then
-  bad "模块已标记为卸载，重启后会被删除"
-else
-  ok "模块已安装并启用"
-fi
-if [ -f "$MODDIR/zygisk/arm64-v8a.so" ]; then
-  ok "注入库在位"
-else
-  bad "缺少 zygisk/arm64-v8a.so，请重新刷入模块"
-fi
-count=$(cat "$MODDIR/.boot_count" 2>/dev/null)
-case "$count" in '' | 0) ;; *) note "启动保护计数：$count（开机完成后会清零；达到 2 会自动停用模块）" ;; esac
-
-echo
-echo "== Zygisk 实现（仅提示，不计入异常）"
-# Only NeoZygisk has been verified. Another implementation should work, since the module uses
-# nothing but the Zygisk module API, but it is untested: the system_server record below is what
-# shows whether the module really loaded.
+# Only NeoZygisk is verified; another implementation is reported as such and is not an error.
+name=
 if [ -f "$NEOZYGISK/module.prop" ] && [ ! -f "$NEOZYGISK/disable" ]; then
   name=$(sed -n 's/^name=//p' "$NEOZYGISK/module.prop" | sed -n 1p)
-  version=$(sed -n 's/^version=//p' "$NEOZYGISK/module.prop" | sed -n 1p)
-  case "$name" in
-    NeoZygisk) info "检测到 NeoZygisk $version（已验证）" ;;
-    *) info "检测到 ${name:-未知的 Zygisk 模块} $version：未验证，请以下面的运行状态为准" ;;
-  esac
+fi
+if [ "$name" = NeoZygisk ]; then
+  ok "Zygisk：NeoZygisk $(sed -n 's/^version=//p' "$NEOZYGISK/module.prop" | sed -n 1p)"
+elif [ -n "$name" ]; then
+  warn "Zygisk：$name 未验证"
 else
-  info "没有检测到 NeoZygisk 模块（可能是其他 Zygisk 实现，或 Magisk 自带的 Zygisk）：未验证，请以下面的运行状态为准"
+  warn "Zygisk：非 NeoZygisk，未验证"
 fi
 
-echo
-echo "== 应用"
-if pm path "$PKG" >/dev/null 2>&1; then
-  app_version=$(dumpsys package "$PKG" 2>/dev/null | sed -n 's/^ *versionName=//p' | sed -n 1p)
-  ok "应用已安装：$app_version"
-  module_version=$(prop version)
-  case "$module_version" in
-    "$app_version"*) ;;
-    *) bad "应用版本 $app_version 与模块 $module_version 不一致，请重新刷入同一个压缩包"
-       note "应用随模块安装；模块目录里还有 fcmfix.apk 时，说明安装应用失败了" ;;
-  esac
-else
-  bad "应用没有安装"
-  if [ -f "$MODDIR/fcmfix.apk" ]; then
-    note "手动安装：pm install -r $MODDIR/fcmfix.apk"
-  else
-    note "重新刷入模块压缩包即可"
-  fi
-fi
+case "$APP" in
+  ok) ok "应用 $APP_VERSION" ;;
+  mismatch) warn "应用 $APP_VERSION 与模块不一致，请重新刷入" ;;
+  missing)
+    bad "应用未安装"
+    [ -f "$MODDIR/fcmfix.apk" ] && echo "   pm install -r $MODDIR/fcmfix.apk"
+    ;;
+esac
 
-echo
-echo "== 运行状态（system_server）"
-server_pid=$(pidof system_server)
-if [ ! -f "$RECORD" ]; then
-  bad "system_server 没有留下加载记录：本次开机模块没有加载"
-  note "确认 Zygisk 实现已启用且本模块已启用后重启；已经开机的系统可在 root 管理器里执行 NeoZygisk 的晚加载"
-else
-  record_pid=$(sed -n 's/^pid=//p' "$RECORD" | sed -n 1p)
-  if [ "$record_pid" != "$server_pid" ]; then
-    bad "加载记录属于另一个 system_server（记录 pid $record_pid，当前 $server_pid）：本次启动模块没有加载"
-    note "确认 Zygisk 实现已启用且本模块已启用后重启"
-  else
-    version=$(sed -n 's/^version=//p' "$RECORD" | sed -n 1p)
-    commit=$(sed -n 's/^commit=//p' "$RECORD" | sed -n 1p)
-    active=$(sed -n 's/^active=//p' "$RECORD" | sed -n 1p)
-    failed=$(sed -n 's/^failedCount=//p' "$RECORD" | sed -n 1p)
-    skipped=$(sed -n 's/^skippedCount=//p' "$RECORD" | sed -n 1p)
-    ready=$(sed -n 's/^ready=//p' "$RECORD" | sed -n 1p)
-    late=$(sed -n 's/^late=//p' "$RECORD" | sed -n 1p)
-    time=$(sed -n 's/^time=//p' "$RECORD" | sed -n 1p)
-    ok "已注入 system_server（pid $server_pid），模块 $version+$commit"
-    if [ "$late" = true ]; then
-      note "这是晚加载：开机时已经发生的限制不会被追溯修正；电池进程要重启后才会被注入"
+case "$RUN" in
+  none) bad "本次开机未加载" ;;
+  starting) warn "已注入，等待初始化完成" ;;
+  ready)
+    ok "已注入 system_server，Hook ${ACTIVE} 项生效"
+    [ "$LATE" = true ] && warn "晚加载：电池进程需重启后才会注入"
+    if [ "${FAILED:-0}" -gt 0 ]; then
+      bad "${FAILED} 项 Hook 失配："
+      sed -n 's/^failed=/   - /p' "$RECORD"
     fi
-    if [ "$ready" = true ]; then
-      ok "已完成初始化，$active 项 Hook 生效，$skipped 项不适用"
-    else
-      bad "Hook 已安装但还没有完成初始化（等待用户解锁，或初始化出错），$active 项生效"
-    fi
-    if [ "${failed:-0}" -gt 0 ]; then
-      bad "$failed 项 Hook 与当前固件不匹配："
-      sed -n 's/^failed=/         - /p' "$RECORD"
-      note "请在应用里导出完整报告反馈；其余 Hook 不受影响"
-    fi
-    [ -n "$time" ] && note "记录时间：$(date -d "@$time" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "$time")"
-  fi
-fi
+    ;;
+esac
 
-echo
-if [ "$problems" -eq 0 ]; then
-  echo "结论：一切正常。电池进程、配置同步和每个应用的状态请在应用的“状态”页查看。"
-  echo "      Zygisk 实现不是 NeoZygisk 时，上面的运行状态正常才算验证通过。"
-else
-  echo "结论：发现 $problems 项异常，见上。"
-fi
+fcmfix_apply_description
 exit 0

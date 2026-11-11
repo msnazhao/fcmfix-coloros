@@ -53,7 +53,7 @@ sleep 10
 shot 01_status; check launch
 
 tap 复制结果; shot 02_copied; check copy
-tap 导出完整报告; sleep 3; shot 03_export_failed; check export
+tap 导出报告; sleep 3; shot 03_export_failed; check export
 tap 确定
 
 tap 应用; sleep 2; shot 04_apps; check apps

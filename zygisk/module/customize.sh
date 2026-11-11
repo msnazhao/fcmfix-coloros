@@ -31,6 +31,4 @@ if [ -f "$APK" ]; then
   fi
 fi
 
-ui_print "- Verified with NeoZygisk. Reboot to activate."
-ui_print "- Action button: check the module, the app and the running hooks"
-ui_print "- Config button: opens the FCMFix-Zygisk app"
+ui_print "- FCMFix-Zygisk: reboot to activate"
