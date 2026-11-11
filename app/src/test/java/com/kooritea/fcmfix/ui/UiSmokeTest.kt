@@ -64,7 +64,7 @@ class UiSmokeTest {
     fun healthyStatus() {
         show(Samples.healthy())
         compose.onNodeWithText("一切正常").assertIsDisplayed()
-        compose.onNodeWithText("Zygisk 13.2-zygisk+abc1234 · 系统框架 14 项 · 电池 4 项").assertExists()
+        compose.onNodeWithText("Zygisk 13.2.0+abc1234 · 系统框架 14 项 · 电池 4 项").assertExists()
         scrollTo("FCM 连接（系统框架检测）")
         compose.onNodeWithText("FCM 连接（系统框架检测）").assertIsDisplayed()
     }

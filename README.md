@@ -1,20 +1,24 @@
-# FCMFix ColorOS
+# FCMFix-Zygisk
 
-修复**国行 ColorOS 16 / 17** 拦截 Google FCM 推送的 LSPosed 模块：应用被划掉或被系统停止后，仍能及时收到推送。
-需要 **Root + LSPosed**（libxposed API 100 及以上）。
+修复**国行 ColorOS 16 / 17** 拦截 Google FCM 推送的 **NeoZygisk 模块**：应用被划掉或被系统停止后，仍能及时收到推送。
+需要 **Root（KernelSU / APatch）+ 已验证的 NeoZygisk**，不再需要 LSPosed。
 
-基于 [kooritea/fcmfix](https://github.com/kooritea/fcmfix) 53 版。已在一加 15（PLK110）上验证，其他 ColorOS 16 / 17 机型可能可用，
-但未经同等级验证。不是 ColorOS 国行请用上游版本。
+基于上游 [ByteJuno/fcmfix-coloros](https://github.com/ByteJuno/fcmfix-coloros)（其基础为 [kooritea/fcmfix](https://github.com/kooritea/fcmfix) 53 版），
+把注入方式从 LSPosed 改为 NeoZygisk。已在一加 15（PLK110）上验证，其他 ColorOS 16 / 17 机型可能可用，但未经同等级验证。
+不是 ColorOS 国行请用上游版本。
+
+版本号 `13.2.0`：前两段是对应的上游版本（13.2），最后一段是本项目自己的修订号（0 到 999）。
 
 ## 安装
 
-1. 从 [Release](https://github.com/ByteJuno/fcmfix-coloros/releases/latest) 或 LSPosed 模块仓库安装。
-2. 在 LSPosed 中启用模块，作用域**同时勾选**“系统框架”和“电池（`com.oplus.battery`）”，然后重启手机。
-3. 打开 FCMFix，放行需要推送的应用，或开启“自动放行包含 FCM 的应用”，并确认这些应用的通知权限已开启。
+1. 从 [Release](https://github.com/msnazhao/fcmfix-coloros/releases/latest) 下载 `FCMFix-Zygisk-<版本>.zip`，在 root 管理器里刷入，然后重启手机。应用随模块自动安装。
+2. 在 root 管理器的模块页：**Action 按钮**检查模块、应用和 Hook 的运行状态；**配置按钮**直接打开 FCMFix-Zygisk 应用。
+3. 在应用里放行需要推送的应用，或开启“自动放行包含 FCM 的应用”，并确认这些应用的通知权限已开启。
 
-不要同时启用两个 FCMFix。从旧包名 `com.fcmfix.coloros` 或 `com.kooritea.fcmfix.op15` 迁移时不能覆盖安装，请先停用并卸载旧版。
+升级：root 管理器会读取模块的更新地址，有新版本时直接提示；也可以在应用的“设置 → 关于 → 检查更新”打开下载页。
+不要同时启用 LSPosed 版的 FCMFix。从 LSPosed 版（包括旧包名 `com.fcmfix.coloros`、`com.kooritea.fcmfix.op15`）迁移时，请先停用并卸载旧版。
 
-更新通知：Telegram 频道 [@ByteJuno](https://t.me/ByteJuno)，新版本发布、构建结果都会推送，欢迎关注。
+问题反馈：[Issues](https://github.com/msnazhao/fcmfix-coloros/issues/new/choose)。
 
 ## 能解决什么
 
@@ -33,7 +37,8 @@
 
 ## 风险与隐私
 
-- 这是 system_server 级别的 Hook，安装前请保留进入安全模式或禁用 LSPosed 模块的恢复手段。
+- 这是 system_server 级别的 Hook，安装前请保留恢复手段：模块自带启动保护（连续两次开机失败会自动停用自己），
+  也可以在 `/data/adb/modules/fcmfix_coloros/` 下新建 `disable` 文件后重启。
   OTA 后 Hook 可能与固件不匹配，此时保持系统原行为，并在“状态”页显示失配；
 - APK 不申请 `INTERNET` 权限，不经过任何服务器中转；导出的报告只保存在本机，由你决定是否分享。
 

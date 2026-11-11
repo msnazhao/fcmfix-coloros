@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">FCMFix ColorOS</string>
-    <string name="module_description">修复 ColorOS 16/17 对 FCM 后台唤醒、广播投递和联网的限制</string>
+    <string name="app_name">FCMFix-Zygisk</string>
+    <string name="module_description">修复 ColorOS 16/17 对 FCM 后台唤醒、广播投递和联网的限制（NeoZygisk 模块）</string>
 </resources>

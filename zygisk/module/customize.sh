@@ -1,13 +1,14 @@
 # Sourced by the root manager's module installer after the files are extracted.
 
 if [ "$ARCH" != "arm64" ]; then
-  abort "! FCMFix ColorOS only supports arm64 (this device: $ARCH)"
+  abort "! FCMFix-Zygisk only supports arm64 (this device: $ARCH)"
 fi
 if [ "$API" -lt 36 ]; then
-  abort "! FCMFix ColorOS needs Android 16 or newer (this device: API $API)"
+  abort "! FCMFix-Zygisk needs Android 16 or newer (this device: API $API)"
 fi
 
 rm -f "$MODPATH/.boot_count"
+set_perm "$MODPATH/action.sh" 0 0 0755
 
 # The companion app: allow list, options and the status page. Installed from here so that it
 # always matches the hook code in this module.
@@ -30,4 +31,6 @@ if [ -f "$APK" ]; then
   fi
 fi
 
-ui_print "- Needs NeoZygisk. Reboot to activate."
+ui_print "- Verified with NeoZygisk. Reboot to activate."
+ui_print "- Action button: check the module, the app and the running hooks"
+ui_print "- Config button: opens the FCMFix-Zygisk app"

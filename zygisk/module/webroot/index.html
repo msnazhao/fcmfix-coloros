@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FCMFix-Zygisk</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: sans-serif; margin: 0; padding: 32px 24px; text-align: center; }
+  h1 { font-size: 1.25rem; margin: 0 0 8px; }
+  p { margin: 8px 0; opacity: .8; }
+  button { margin-top: 24px; padding: 12px 28px; font-size: 1rem; border: 0; border-radius: 24px; background: #5b5bd6; color: #fff; }
+  #result { min-height: 1.5em; }
+  .error { color: #d32f2f; opacity: 1; }
+</style>
+</head>
+<body>
+<h1>FCMFix-Zygisk</h1>
+<p id="result">正在打开应用…</p>
+<button id="open" type="button">打开 FCMFix-Zygisk</button>
+<script>
+// The root manager's WebUI button is the module's "configuration" button: it opens the app,
+// where the allow list and options live. ksu.exec is the manager's own bridge (the same call
+// the "kernelsu" npm package wraps); it runs the command in a root shell.
+var COMPONENT = "io.github.artifical0.fcmfix.coloros/com.kooritea.fcmfix.MainActivity";
+var result = document.getElementById("result");
+var started = 0;
+
+function show(text, isError) {
+  result.textContent = text;
+  result.className = isError ? "error" : "";
+}
+
+function openApp() {
+  if (typeof ksu === "undefined" || typeof ksu.exec !== "function") {
+    show("请在 root 管理器里打开本页面。", true);
+    return;
+  }
+  var callback = "openApp_callback_" + Date.now() + "_" + (started++);
+  window[callback] = function (errno, stdout, stderr) {
+    delete window[callback];
+    var output = (stdout || "") + (stderr || "");
+    // am prints "Error: Activity class ... does not exist" and still exits 0 on some builds.
+    if (errno === 0 && output.indexOf("Error") === -1) {
+      show("已打开。");
+      if (typeof ksu.exit === "function") ksu.exit();
+    } else {
+      show("无法打开应用，可能还没有安装。重新刷入模块压缩包，或在模块目录里手动安装 fcmfix.apk。\n" + output.trim(), true);
+    }
+  };
+  try {
+    ksu.exec("am start --user 0 -n " + COMPONENT, "{}", callback);
+  } catch (error) {
+    delete window[callback];
+    show("无法打开应用：" + error, true);
+  }
+}
+
+document.getElementById("open").addEventListener("click", openApp);
+openApp();
+</script>
+</body>
+</html>

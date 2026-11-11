@@ -16,6 +16,7 @@ import com.kooritea.fcmfix.util.DiagnosticLogger;
 import com.kooritea.fcmfix.util.FcmTrust;
 import com.kooritea.fcmfix.util.HookStatus;
 import com.kooritea.fcmfix.util.OplusAttribution;
+import com.kooritea.fcmfix.util.RunRecord;
 import com.kooritea.fcmfix.util.SelfCheck;
 import com.kooritea.fcmfix.zygisk.BuildInfo;
 import java.io.File;
@@ -38,6 +39,8 @@ public abstract class XposedModule {
     private static final String ACTION_QUERY_STATUS = MODULE_PACKAGE_NAME + HookStatus.QUERY_ACTION_SUFFIX;
     /** system_server keeps the config here; the module app pushes it whenever it changes. */
     private static final File CONFIG_FILE = new File("/data/system/fcmfix/config.properties");
+    /** What action.sh in the module reads: this boot's hook result, written by system_server. */
+    private static final File RUN_RECORD_FILE = new File("/data/system/fcmfix/run.properties");
     private static String selfPackageName = "UNKNOWN";
     private static volatile boolean lateInject;
 
@@ -82,6 +85,7 @@ public abstract class XposedModule {
     public static synchronized void activate(Context processContext) {
         if (isBootComplete) return;
         context = processContext;
+        writeRunRecord(false);
         if (context.getSystemService(UserManager.class).isUserUnlocked()) {
             ready();
         } else {
@@ -100,6 +104,20 @@ public abstract class XposedModule {
         // during a reboot within that minute; stopped apps would miss them. Until the config
         // is loaded, targetIsAllow() is false anyway.
         isBootComplete = true;
+        writeRunRecord(true);
+    }
+
+    /** system_server only; a failure to write must never affect the hooks. */
+    private static void writeRunRecord(boolean ready) {
+        if (!ownsConfig()) return;
+        try {
+            RunRecord.write(RUN_RECORD_FILE, RunRecord.render(
+                    BuildInfo.VERSION, BuildInfo.COMMIT, lateInject, ready, android.os.Process.myPid(),
+                    System.currentTimeMillis() / 1000, OplusHooks.STATUS.active(), OplusHooks.STATUS.failed(),
+                    OplusHooks.STATUS.skipped()));
+        } catch (Throwable e) {
+            printLog("Run record could not be written: " + e);
+        }
     }
 
     protected static void printLog(String text) {

@@ -12,10 +12,10 @@ import java.util.Date
 
 class StatusReportTest {
     private val now = 1_760_000_000_000L
-    private val version = "13.2-zygisk+abc1234"
+    private val version = "13.2.0+abc1234"
 
     private fun env(local: LocalConfig? = LocalConfig(2, false), sdk: Int = 36) = ReportEnv(
-        sdkInt = sdk, display = "PJE110_16.0.2.400", versionName = "13.2",
+        sdkInt = sdk, display = "PJE110_16.0.2.400", versionName = "13.2.0",
         localConfig = local, now = now,
         label = { "Label($it)" },
         relativeTime = { "${(now - it) / 60_000} 分钟前" },
@@ -57,16 +57,16 @@ class StatusReportTest {
         assertEquals(Level.OK, summary.level)
         assertEquals("一切正常", summary.title)
         assertEquals("FCM 已连接 1.2.3.4:5228（Wi‑Fi） · 已持续 3 小时 0 分钟\n开机以来没有断线或重连", summary.detail)
-        assertEquals("Zygisk 13.2-zygisk+abc1234 · 系统框架 2 项 · 电池 1 项", summary.footer)
+        assertEquals("Zygisk 13.2.0+abc1234 · 系统框架 2 项 · 电池 1 项", summary.footer)
     }
 
     @Test
     fun moduleRowSaysWhenModuleAndAppDiffer() {
-        val old = healthy.copy(hooks = hooks + ("android" to hooks.getValue("android").copy(version = "12.9-zygisk+old")))
+        val old = healthy.copy(hooks = hooks + ("android" to hooks.getValue("android").copy(version = "13.1.0+old")))
         val row = StatusReport.build(env(), old).rows.single { it.title == "Zygisk 模块" }
         assertEquals(Level.WARN, row.level)
         assertTrue(row.problem)
-        assertEquals("版本 12.9-zygisk+old 与应用 13.2 不一致", row.detail)
+        assertEquals("版本 13.1.0+old 与应用 13.2.0 不一致", row.detail)
     }
 
     @Test
@@ -97,6 +97,24 @@ class StatusReportTest {
         assertEquals(Level.WARN, mismatch.level)
         val noLocal = StatusReport.build(env(local = null), healthy).rows
         assertTrue(noLocal.none { it.title == "配置同步" })
+    }
+
+    @Test
+    fun autoAllowRowSaysHowManyOfTheRecognisedAppsAreAllowed() {
+        // 3 recognised; one is allowed automatically, one ticked by hand, one switched off.
+        val status = healthy.copy(
+            autoAllow = true, fcmPackages = 3, apps = listOf("auto", "manual"),
+            appChecks = mapOf(
+                "auto" to AppCheck(true, 1, 0, 10, false, false, 0, 0),
+                "manual" to AppCheck(false, 1, 0, 10, false, false, 0, 0),
+            ),
+        )
+        val row = StatusReport.build(env(), status).rows.single { it.title == "自动放行" }
+        assertEquals("已开启，系统框架识别到 3 个包含 FCM 的应用，其中 1 个已自动放行", row.detail)
+        assertEquals("其余的是你在“应用”页关闭了的应用，或已在手动列表中", row.hint)
+
+        val all = status.copy(fcmPackages = 1, apps = listOf("auto"), appChecks = status.appChecks - "manual")
+        assertNull(StatusReport.build(env(), all).rows.single { it.title == "自动放行" }.hint)
     }
 
     @Test

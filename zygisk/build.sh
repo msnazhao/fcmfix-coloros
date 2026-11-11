@@ -22,7 +22,7 @@ BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
 VERSION_NAME=$(sed -n 's/.*versionName "\([^"]*\)".*/\1/p' "$ROOT/app/build.gradle")
 VERSION_CODE=$(sed -n 's/.*versionCode \([0-9]*\).*/\1/p' "$ROOT/app/build.gradle")
 COMMIT=$(git -C "$ROOT" rev-parse --short HEAD)
-VERSION="$VERSION_NAME-zygisk"
+VERSION="$VERSION_NAME"
 
 rm -rf "$OUT"
 mkdir -p "$OUT/src" "$OUT/classes" "$OUT/dex"
@@ -74,7 +74,8 @@ STAGE=$OUT/module
 cp -r "$ROOT/zygisk/module" "$STAGE"
 mkdir -p "$STAGE/zygisk"
 cp "$LIB" "$STAGE/zygisk/$ABI.so"
-sed -i "s/@VERSION@/$VERSION+$COMMIT/; s/@VERSION_CODE@/$VERSION_CODE/" "$STAGE/module.prop"
+REPO=${GITHUB_REPOSITORY:-msnazhao/fcmfix-coloros}
+sed -i "s/@VERSION@/$VERSION+$COMMIT/; s/@VERSION_CODE@/$VERSION_CODE/; s|@REPO@|$REPO|" "$STAGE/module.prop"
 
 echo "== app"
 if [ -n "${SIGNING_KEYSTORE:-}" ] && [ -f "$SIGNING_KEYSTORE" ]; then
@@ -108,7 +109,7 @@ for script in "$STAGE"/*.sh "$STAGE/META-INF/com/google/android/update-binary"; 
   sh -n "$script"
 done
 
-ZIP=$OUT/fcmfix-coloros-zygisk-$VERSION_NAME-$COMMIT.zip
+ZIP=$OUT/FCMFix-Zygisk-$VERSION_NAME-$COMMIT.zip
 (cd "$STAGE" && zip -qr9 "$ZIP" .)
 (cd "$OUT" && sha256sum "$(basename "$ZIP")" > SHA256SUMS)
 unzip -l "$ZIP"

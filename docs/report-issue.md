@@ -1,7 +1,7 @@
 # 如何提交问题与日志
 
-先更新到最新版，再按下面三步收集信息，然后[提交 Issue](https://github.com/ByteJuno/fcmfix-coloros/issues/new/choose)。
-FCMFix 的日志在系统 logcat 中（标签 `fcmfix`），不在 LSPosed 管理器的“模块日志”里。
+先更新到最新版，再按下面三步收集信息，然后[提交 Issue](https://github.com/msnazhao/fcmfix-coloros/issues/new/choose)。
+FCMFix-Zygisk 的日志在系统 logcat 中（标签 `fcmfix`）。root 管理器里模块的 Action 按钮可以先快速确认模块是否加载。
 
 ## 1. 先看“状态”页
 

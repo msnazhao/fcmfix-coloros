@@ -276,7 +276,12 @@ class StatusReport private constructor(
                 if (status.fcmPackages < 0) {
                     add(Level.WARN, "自动放行", "已开启，系统框架还没有完成应用扫描", "稍后再查一次；一直如此请重启手机")
                 } else {
-                    add(Level.INFO, "自动放行", "已开启，系统框架识别到 ${status.fcmPackages} 个包含 FCM 的应用", null)
+                    val automatic = status.appChecks.values.count { it.auto }
+                    add(
+                        Level.INFO, "自动放行",
+                        "已开启，系统框架识别到 ${status.fcmPackages} 个包含 FCM 的应用，其中 $automatic 个已自动放行",
+                        if (automatic < status.fcmPackages) "其余的是你在“应用”页关闭了的应用，或已在手动列表中" else null,
+                    )
                 }
             }
         }

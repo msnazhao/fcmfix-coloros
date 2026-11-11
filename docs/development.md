@@ -61,13 +61,22 @@ Hook 尽量挂在 Binder 入口、跨 jar 调用的服务方法或体积较大�
 
 ## 发布
 
-- 普通 master push（只改文档时跳过）/ PR：检查 `docs/releases/<versionName>.md` 是否存在，JUnit、lintDebug、lintRelease、Debug/Release 构建，
-  无签名步骤；另有截图和模拟器两个任务（可在 Actions 中手动运行任意分支）。改 versionName 时同一提交里写好发布说明，CI 才会通过。
-- `docs/releases/` 只保留当前版本，改 versionName 时删掉上一版的说明；历史说明都在 GitHub Release 中。
-- 版本号从 13.0 起为 `主版本.修订`，测试版加 `-rcN`，例如 `13.0-rc5`、`13.0`、`13.1`。
-  此前的版本号形如 `53-coloros-12.1`，其中 53 是上游 fcmfix 的版本；旧 tag 保持不变。
-- 推送 `v*` tag 触发正式发布：校验 tag 等于 `v` + `versionName`（如 `v13.0-rc5`），测试和 lint 通过后签名、校验签名、
-  生成 SHA256SUMS，并以 `docs/releases/<versionName>.md` 作为 Release 说明。tag 含 `-rc` 时自动标为预发布。
-- LSPosed 分发仓库 `Xposed-Modules-Repo/io.github.artifical0.fcmfix.coloros` 只发布正式版，tag 为 `versionCode-versionName`
-  （如 `77-13.0`），上传同一个签名 APK；发布后会推送给所有用户。
-- versionCode 只能递增。
+- 版本号是 `<上游主版本>.<上游次版本>.<本项目修订号>`，修订号从 0 到 999 递增，例如上游 13.2 之上的第一版是 `13.2.0`，之后 `13.2.1`……；
+  上游升到 13.3 时从 `13.3.0` 重新开始。`app/build.gradle` 的 `versionName` 是唯一的来源，模块和应用共用它。
+- `versionCode` 只能递增，每次发布都要加 1：设备上已安装的应用不会被更低的 versionCode 覆盖，root 管理器也靠它判断有没有新版本。
+- 改 `versionName` 时同一提交里写好 `docs/releases/<versionName>.md`，改完删掉上一版的说明；历史说明都在 GitHub Release 中。
+- 推送到 `zygisk` 分支或 PR 触发 `Zygisk module` 工作流：编译 Hook dex 和注入库，运行 `hook`、`app` 的单元测试，打包带签名应用的模块 zip，
+  作为产物（14 天）上传。
+- 推送 `v*` tag 触发 `Tagged release`：校验 `versionName` 形如 `13.2.0`、tag 等于 `v` + `versionName`、发布说明存在，
+  然后构建并上传到 GitHub Release：`FCMFix-Zygisk-<版本>.zip`、`update.json`、`SHA256SUMS`。缺少签名密钥或 zip 里没有应用时失败，
+  不会发布一个没有应用的模块。tag 含 `-rc` 时标为预发布。
+- `update.json` 由工作流生成，内容是 `version`、`versionCode`、`zipUrl`、`changelog`。模块的 `module.prop` 里
+  `updateJson` 指向 `releases/latest/download/update.json`，所以 root 管理器总是读到最新的正式版（预发布不算）。
+- 签名密钥来自仓库 Secrets：`KEYSTORE`（base64）、`KEYSTORE_PASSWORD`、`KEY_ALIAS`。
+
+## root 管理器里的两个按钮
+
+- Action 按钮运行模块里的 `action.sh`：检查模块是否启用、NeoZygisk 是否在、应用是否安装且版本一致，
+  并读取 system_server 在 `/data/system/fcmfix/run.properties` 留下的本次开机记录（版本、是否晚加载、生效与失配的 Hook 数量）。
+  记录里的 pid 与当前 system_server 不同，说明本次启动模块没有加载。脚本只读，不改任何东西。
+- 配置按钮（WebUI，`webroot/index.html`）调用 root 管理器的 `ksu.exec` 执行 `am start` 打开应用。

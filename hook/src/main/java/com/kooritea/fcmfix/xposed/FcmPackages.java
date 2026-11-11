@@ -1,11 +1,8 @@
 package com.kooritea.fcmfix.xposed;
 
 import android.content.Context;
-import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 
-import com.kooritea.fcmfix.util.FcmTrust;
+import com.kooritea.fcmfix.util.FcmApps;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -16,12 +13,10 @@ import java.util.concurrent.Executors;
 /**
  * Installed apps that can receive FCM, kept in system_server for the auto-allow option. The
  * delivery hooks only read the published set; scans run on one worker thread, never inside a
- * broadcast or AMS call.
+ * broadcast or AMS call. What counts as an FCM app is decided by FcmApps, the same rule the
+ * module app uses for its list.
  */
 final class FcmPackages {
-    private static final String MESSAGING_EVENT = "com.google.firebase.MESSAGING_EVENT";
-    private static final int FLAGS = PackageManager.MATCH_DISABLED_COMPONENTS
-            | PackageManager.MATCH_DIRECT_BOOT_AWARE | PackageManager.MATCH_DIRECT_BOOT_UNAWARE;
     private static final ExecutorService worker =
             Executors.newSingleThreadExecutor(runnable -> new Thread(runnable, "FCMFix-fcm-apps"));
     /** null until the first scan finishes. */
@@ -47,18 +42,7 @@ final class FcmPackages {
         scanQueued = true;
         worker.execute(() -> {
             try {
-                PackageManager pm = context.getPackageManager();
-                Set<String> found = new HashSet<>();
-                for (ResolveInfo info : pm.queryBroadcastReceivers(new Intent(FcmTrust.RECEIVE), FLAGS)) {
-                    if (info.activityInfo != null && FcmTrust.isAppUid(info.activityInfo.applicationInfo.uid)) {
-                        found.add(info.activityInfo.packageName);
-                    }
-                }
-                for (ResolveInfo info : pm.queryIntentServices(new Intent(MESSAGING_EVENT), FLAGS)) {
-                    if (info.serviceInfo != null && FcmTrust.isAppUid(info.serviceInfo.applicationInfo.uid)) {
-                        found.add(info.serviceInfo.packageName);
-                    }
-                }
+                Set<String> found = FcmApps.scan(context.getPackageManager());
                 packages = Collections.unmodifiableSet(found);
                 XposedModule.printLog("FCM apps scanned for auto-allow: " + found.size());
             } catch (Throwable e) {
@@ -77,10 +61,7 @@ final class FcmPackages {
             Set<String> snapshot = packages;
             if (snapshot == null) return;
             try {
-                PackageManager pm = context.getPackageManager();
-                boolean fcm = isAppPackage(pm, packageName)
-                        && (!pm.queryBroadcastReceivers(new Intent(FcmTrust.RECEIVE).setPackage(packageName), FLAGS).isEmpty()
-                        || !pm.queryIntentServices(new Intent(MESSAGING_EVENT).setPackage(packageName), FLAGS).isEmpty());
+                boolean fcm = FcmApps.packageHasFcm(context.getPackageManager(), packageName);
                 if (fcm == snapshot.contains(packageName)) return;
                 Set<String> updated = new HashSet<>(snapshot);
                 if (fcm) updated.add(packageName);
@@ -91,14 +72,5 @@ final class FcmPackages {
                 XposedModule.printLog("FCM app check failed: " + packageName + ": " + e);
             }
         });
-    }
-
-    /** false for system-uid packages and for one that was just removed. */
-    private static boolean isAppPackage(PackageManager pm, String packageName) {
-        try {
-            return FcmTrust.isAppUid(pm.getPackageUid(packageName, 0));
-        } catch (PackageManager.NameNotFoundException e) {
-            return false;
-        }
     }
 }

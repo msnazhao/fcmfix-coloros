@@ -19,7 +19,7 @@ import java.util.Locale
 object Samples {
     val now = System.currentTimeMillis()
     private const val MINUTE = 60_000L
-    private const val VERSION = "13.2-zygisk+abc1234"
+    private const val VERSION = "13.2.0+abc1234"
 
     fun relativeTime(time: Long): String {
         val minutes = (now - time) / MINUTE
@@ -118,19 +118,19 @@ object Samples {
 
     private fun report(status: StatusSnapshot, config: ModuleConfig? = this.config) = StatusReport.build(
         ReportEnv(
-            36, "PJE110_16.0.2.400(CN01)", "13.2",
+            36, "PJE110_16.0.2.400(CN01)", "13.2.0",
             config?.let { LocalConfig(it.allowList.size, it.autoAllowFcm) }, now,
             { name -> apps.firstOrNull { it.packageName == name }?.label ?: name }, ::relativeTime,
         ),
         status,
     )
 
-    fun healthy() = AppUiState(config, apps, report(healthySnapshot), versionName = "13.2")
+    fun healthy() = AppUiState(config, apps, report(healthySnapshot), versionName = "13.2.0")
 
-    fun problems() = AppUiState(config, apps, report(problemSnapshot), versionName = "13.2")
+    fun problems() = AppUiState(config, apps, report(problemSnapshot), versionName = "13.2.0")
 
     /** No module answered: the status query came back empty. */
-    fun inactive() = AppUiState(null, apps, report(StatusSnapshot(), null), versionName = "13.2")
+    fun inactive() = AppUiState(null, apps, report(StatusSnapshot(), null), versionName = "13.2.0")
 
-    fun loading() = AppUiState(null, null, null, versionName = "13.2")
+    fun loading() = AppUiState(null, null, null, versionName = "13.2.0")
 }

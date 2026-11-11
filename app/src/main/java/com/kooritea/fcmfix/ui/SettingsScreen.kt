@@ -33,8 +33,11 @@ import androidx.compose.ui.unit.dp
 import com.kooritea.fcmfix.R
 import com.kooritea.fcmfix.util.SelfCheck.Level
 
-private const val PROJECT_URL = "https://github.com/ByteJuno/fcmfix-coloros"
-private const val REPORT_GUIDE_URL = "$PROJECT_URL/blob/master/docs/report-issue.md"
+private const val PROJECT_URL = "https://github.com/msnazhao/fcmfix-coloros"
+private const val UPSTREAM_URL = "https://github.com/ByteJuno/fcmfix-coloros"
+private const val NEOZYGISK_URL = "https://github.com/JingMatrix/NeoZygisk"
+private const val ISSUES_URL = "$PROJECT_URL/issues/new/choose"
+private const val RELEASES_URL = "$PROJECT_URL/releases/latest"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,16 +103,28 @@ fun SettingsScreen(
                     ListItem(
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         leadingContent = { LevelIcon(Level.INFO) },
-                        headlineContent = { Text("FCMFix ColorOS ${state.versionName}", fontWeight = FontWeight.Medium) },
-                        supportingContent = { Text("基于上游 fcmfix 53。需要 NeoZygisk，模块里带着本应用") },
+                        headlineContent = { Text("FCMFix-Zygisk ${state.versionName}", fontWeight = FontWeight.Medium) },
+                        supportingContent = { Text("基于上游 ByteJuno/fcmfix-coloros，支持 NeoZygisk。模块里带着本应用") },
                     )
                     RowDivider()
-                    ActionRow(R.drawable.ic_code, "项目主页", "github.com/ByteJuno/fcmfix-coloros", trailing = R.drawable.ic_open_in_new) {
+                    ActionRow(R.drawable.ic_code, "项目主页", "github.com/msnazhao/fcmfix-coloros", trailing = R.drawable.ic_open_in_new) {
                         nav.openUrl(PROJECT_URL)
                     }
                     RowDivider()
-                    ActionRow(R.drawable.ic_guide, "如何提交问题与日志", "推送收不到时的排查步骤", trailing = R.drawable.ic_open_in_new) {
-                        nav.openUrl(REPORT_GUIDE_URL)
+                    ActionRow(R.drawable.ic_guide, "提交问题", "在项目的 Issues 中反馈；先按排查步骤导出报告", trailing = R.drawable.ic_open_in_new) {
+                        nav.openUrl(ISSUES_URL)
+                    }
+                    RowDivider()
+                    ActionRow(R.drawable.ic_refresh, "检查更新", "打开最新版本的下载页", trailing = R.drawable.ic_open_in_new) {
+                        nav.openUrl(RELEASES_URL)
+                    }
+                    RowDivider()
+                    ActionRow(R.drawable.ic_code, "上游项目", "ByteJuno/fcmfix-coloros", trailing = R.drawable.ic_open_in_new) {
+                        nav.openUrl(UPSTREAM_URL)
+                    }
+                    RowDivider()
+                    ActionRow(R.drawable.ic_code, "NeoZygisk", "JingMatrix/NeoZygisk", trailing = R.drawable.ic_open_in_new) {
+                        nav.openUrl(NEOZYGISK_URL)
                     }
                 }
             }

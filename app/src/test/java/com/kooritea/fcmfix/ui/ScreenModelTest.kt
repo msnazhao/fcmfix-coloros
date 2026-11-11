@@ -14,7 +14,7 @@ import org.junit.Test
 
 class ScreenModelTest {
     private fun report(status: StatusSnapshot) = StatusReport.build(
-        ReportEnv(36, "", "13.2", null, 0, { it }, { "刚刚" }), status,
+        ReportEnv(36, "", "13.2.0", null, 0, { it }, { "刚刚" }), status,
     )
 
     @Test
