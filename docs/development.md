@@ -76,7 +76,9 @@ Hook 尽量挂在 Binder 入口、跨 jar 调用的服务方法或体积较大�
 
 ## root 管理器里的两个按钮
 
-- Action 按钮运行模块里的 `action.sh`：检查模块是否启用、NeoZygisk 是否在、应用是否安装且版本一致，
+- Action 按钮运行模块里的 `action.sh`：检查模块是否启用、应用是否安装且版本一致，
   并读取 system_server 在 `/data/system/fcmfix/run.properties` 留下的本次开机记录（版本、是否晚加载、生效与失配的 Hook 数量）。
-  记录里的 pid 与当前 system_server 不同，说明本次启动模块没有加载。脚本只读，不改任何东西。
+  记录里的 pid 与当前 system_server 不同，说明本次启动模块没有加载。
+  Zygisk 实现只作提示：是 NeoZygisk 显示“已验证”，否则显示“未验证”，两者都不计入异常，是否加载以上面的记录为准。
+  脚本只读，不改任何东西。
 - 配置按钮（WebUI，`webroot/index.html`）调用 root 管理器的 `ksu.exec` 执行 `am start` 打开应用。

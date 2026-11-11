@@ -1,7 +1,8 @@
 # FCMFix-Zygisk
 
 修复**国行 ColorOS 16 / 17** 拦截 Google FCM 推送的 **NeoZygisk 模块**：应用被划掉或被系统停止后，仍能及时收到推送。
-需要 **Root（KernelSU / APatch）+ 已验证的 NeoZygisk**，不再需要 LSPosed。
+需要 **Root（KernelSU / APatch）+ Zygisk 实现**。已验证的是 NeoZygisk；模块只用 Zygisk 模块接口，理论上兼容其他 Zygisk 实现，
+但**没有验证过**，换用其他实现时请在 Action 或应用的“状态”页确认模块真的加载了。不再需要 LSPosed。
 
 基于上游 [ByteJuno/fcmfix-coloros](https://github.com/ByteJuno/fcmfix-coloros)（其基础为 [kooritea/fcmfix](https://github.com/kooritea/fcmfix) 53 版），
 把注入方式从 LSPosed 改为 NeoZygisk。已在一加 15（PLK110）上验证，其他 ColorOS 16 / 17 机型可能可用，但未经同等级验证。

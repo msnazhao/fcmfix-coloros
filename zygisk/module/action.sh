@@ -10,6 +10,7 @@ problems=0
 ok() { echo "[正常] $1"; }
 bad() { echo "[异常] $1"; problems=$((problems + 1)); }
 note() { echo "       $1"; }
+info() { echo "[提示] $1"; }
 
 prop() { sed -n "s/^$1=//p" "$MODDIR/module.prop" | sed -n 1p; }
 
@@ -34,13 +35,19 @@ count=$(cat "$MODDIR/.boot_count" 2>/dev/null)
 case "$count" in '' | 0) ;; *) note "启动保护计数：$count（开机完成后会清零；达到 2 会自动停用模块）" ;; esac
 
 echo
-echo "== NeoZygisk"
-if [ ! -d "$NEOZYGISK" ]; then
-  bad "没有找到 NeoZygisk（$NEOZYGISK），本模块需要它来注入"
-elif [ -f "$NEOZYGISK/disable" ]; then
-  bad "NeoZygisk 已被停用"
+echo "== Zygisk 实现（仅提示，不计入异常）"
+# Only NeoZygisk has been verified. Another implementation should work, since the module uses
+# nothing but the Zygisk module API, but it is untested: the system_server record below is what
+# shows whether the module really loaded.
+if [ -f "$NEOZYGISK/module.prop" ] && [ ! -f "$NEOZYGISK/disable" ]; then
+  name=$(sed -n 's/^name=//p' "$NEOZYGISK/module.prop" | sed -n 1p)
+  version=$(sed -n 's/^version=//p' "$NEOZYGISK/module.prop" | sed -n 1p)
+  case "$name" in
+    NeoZygisk) info "检测到 NeoZygisk $version（已验证）" ;;
+    *) info "检测到 ${name:-未知的 Zygisk 模块} $version：未验证，请以下面的运行状态为准" ;;
+  esac
 else
-  ok "NeoZygisk 已安装并启用：$(sed -n 's/^version=//p' "$NEOZYGISK/module.prop" | sed -n 1p)"
+  info "没有检测到 NeoZygisk 模块（可能是其他 Zygisk 实现，或 Magisk 自带的 Zygisk）：未验证，请以下面的运行状态为准"
 fi
 
 echo
@@ -68,12 +75,12 @@ echo "== 运行状态（system_server）"
 server_pid=$(pidof system_server)
 if [ ! -f "$RECORD" ]; then
   bad "system_server 没有留下加载记录：本次开机模块没有加载"
-  note "确认 NeoZygisk 和本模块都已启用后重启；已经开机的系统可在 root 管理器里执行 NeoZygisk 的晚加载"
+  note "确认 Zygisk 实现已启用且本模块已启用后重启；已经开机的系统可在 root 管理器里执行 NeoZygisk 的晚加载"
 else
   record_pid=$(sed -n 's/^pid=//p' "$RECORD" | sed -n 1p)
   if [ "$record_pid" != "$server_pid" ]; then
     bad "加载记录属于另一个 system_server（记录 pid $record_pid，当前 $server_pid）：本次启动模块没有加载"
-    note "确认 NeoZygisk 和本模块都已启用后重启"
+    note "确认 Zygisk 实现已启用且本模块已启用后重启"
   else
     version=$(sed -n 's/^version=//p' "$RECORD" | sed -n 1p)
     commit=$(sed -n 's/^commit=//p' "$RECORD" | sed -n 1p)
@@ -104,6 +111,7 @@ fi
 echo
 if [ "$problems" -eq 0 ]; then
   echo "结论：一切正常。电池进程、配置同步和每个应用的状态请在应用的“状态”页查看。"
+  echo "      Zygisk 实现不是 NeoZygisk 时，上面的运行状态正常才算验证通过。"
 else
   echo "结论：发现 $problems 项异常，见上。"
 fi
